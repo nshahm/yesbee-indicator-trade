@@ -29,8 +29,10 @@ class TrendMomentumStrategy:
         self.options = options
         self.symbol = symbol
         
-        # Risk Management from system.md
-        risk_config = options.get('risk_management', {})
+        # Risk Management: Priority to index config, fallback to global
+        index_config = options.get('indices', {}).get(symbol.lower(), {})
+        risk_config = index_config.get('risk_management', options.get('risk_management', {}))
+        
         self.capital = risk_config.get('capital', 100000)
         self.risk_per_trade_percent = risk_config.get('risk_per_trade', 1.0) / 100.0
         self.max_open_trades = risk_config.get('max_open_trades', 3)

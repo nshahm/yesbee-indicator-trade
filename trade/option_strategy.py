@@ -205,12 +205,15 @@ class OptionStrategy:
         self.symbol = symbol
         self.rsi_config = options.get('indicators', {}).get('rsi', {})
         self.atr_config = options.get('indicators', {}).get('atr', {})
+        self.macd_config = options.get('indicators', {}).get('macd', {})
+        self.stoch_config = options.get('indicators', {}).get('stochastic', {})
         self.pattern_config = options.get('patterns', {})
         self.trading_hours = options.get('trading_hours', {})
         index_config = options.get('indices', {}).get(symbol.lower(), {})
         self.max_concurrent_trades = index_config.get('max_concurrent_trades', 1)
         
-        self.risk_management = options.get('risk_management', {})
+        # Risk management from index config, fallback to global
+        self.risk_management = index_config.get('risk_management', options.get('risk_management', {}))
         self.max_trades_per_day = self.risk_management.get('max_trades_per_day', 0)
         self.max_consecutive_losses_per_day = self.risk_management.get('max_consecutive_losses_per_day', 0)
         self.sl_config = self.risk_management.get('stop_loss', {})
@@ -273,11 +276,49 @@ class OptionStrategy:
         for i in range(5, len(df_lower) + 1):
             window_df_lower = df_lower.iloc[i-5:i]
             current_row_lower = df_lower.iloc[i-1]
+            prev_row_lower = df_lower.iloc[i-2] if i > 1 else None
+            
             current_rsi = current_row_lower.get('rsi')
             current_atr = current_row_lower.get('atr')
-            previous_rsi = df_lower.iloc[i-2].get('rsi') if i > 1 else None
+            previous_rsi = prev_row_lower.get('rsi') if prev_row_lower is not None else None
             current_time = current_row_lower['date']
             
+            # Double Cross Indicators
+            f, s, sig = self.macd_config.get('fast', 12), self.macd_config.get('slow', 26), self.macd_config.get('signal', 9)
+            k, d, sk = self.stoch_config.get('k', 14), self.stoch_config.get('d', 3), self.stoch_config.get('smooth_k', 3)
+            
+            macd_col = f"MACD_{f}_{s}_{sig}"
+            hist_col = f"MACDh_{f}_{s}_{sig}"
+            sig_col = f"MACDs_{f}_{s}_{sig}"
+            stoch_k_col = f"STOCHk_{k}_{d}_{sk}"
+            stoch_d_col = f"STOCHd_{k}_{d}_{sk}"
+            
+            curr_macd_h = current_row_lower.get(hist_col)
+            curr_stoch_k = current_row_lower.get(stoch_k_col)
+            curr_stoch_d = current_row_lower.get(stoch_d_col)
+            
+            prev_stoch_k = prev_row_lower.get(stoch_k_col) if prev_row_lower is not None else None
+            prev_stoch_d = prev_row_lower.get(stoch_d_col) if prev_row_lower is not None else None
+            
+            # Double Cross Signal Logic
+            double_cross_signal = None
+            if self.macd_config.get('enabled', True) and self.stoch_config.get('enabled', True):
+                oversold = self.stoch_config.get('oversold', 20)
+                overbought = self.stoch_config.get('overbought', 80)
+                
+                if prev_stoch_k is not None and prev_stoch_d is not None and \
+                   curr_stoch_k is not None and curr_stoch_d is not None and curr_macd_h is not None:
+                    
+                    # Bullish Cross: %K crosses above %D below oversold level AND MACD Histogram > 0
+                    if prev_stoch_k < prev_stoch_d and curr_stoch_k > curr_stoch_d and \
+                       curr_stoch_k < oversold and curr_macd_h > 0:
+                        double_cross_signal = 'CALL'
+                    
+                    # Bearish Cross: %K crosses below %D above overbought level AND MACD Histogram < 0
+                    elif prev_stoch_k > prev_stoch_d and curr_stoch_k < curr_stoch_d and \
+                         curr_stoch_k > overbought and curr_macd_h < 0:
+                        double_cross_signal = 'PUT'
+
             # Daily Reset for Risk Management
             trade_date = current_time.date()
             if current_day != trade_date:
@@ -448,31 +489,43 @@ class OptionStrategy:
                     last_exit_time = current_time
                     current_pos = None
 
-            # 2. Exit if RSI trend REVERSES (Wait for opposite signal, don't just exit if None)
-            if current_pos and rsi_trend_signal and rsi_trend_signal != current_pos:
-                # MTF Check for RSI Reversal
-                mtf_aligned = (current_pos == 'CALL' and upper_category == 'Bullish') or \
-                              (current_pos == 'PUT' and upper_category == 'Bearish')
+            # 2. Exit if RSI trend REVERSES or Double Cross Reversal
+            if current_pos:
+                is_reversal = (rsi_trend_signal and rsi_trend_signal != current_pos) or \
+                              (double_cross_signal and double_cross_signal != current_pos)
                 
-                # Only exit if MTF is not aligned OR if the reversal signal is strong
-                if not mtf_aligned:
-                    trade = active_trades[current_pos]
-                    if trade:
-                        trade.exit_time = current_row_lower['date'].isoformat()
-                        trade.exit_price = current_row_lower['close']
-                        completed_trades.append(trade)
-                        
-                        # Update Risk Management: Consecutive Losses
-                        is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
-                                  (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
-                        if is_loss:
-                            consecutive_losses_today += 1
-                        else:
-                            consecutive_losses_today = 0
+                # Exit if stochastic exits extreme zone (Double Cross Exit)
+                stoch_exit = False
+                if self.stoch_config.get('enabled', True):
+                    if current_pos == 'CALL' and curr_stoch_k > 70: # Standard exit for long
+                         stoch_exit = True
+                    elif current_pos == 'PUT' and curr_stoch_k < 30: # Standard exit for short
+                         stoch_exit = True
+
+                if is_reversal or stoch_exit:
+                    # MTF Check for reversal
+                    mtf_aligned = (current_pos == 'CALL' and upper_category == 'Bullish') or \
+                                  (current_pos == 'PUT' and upper_category == 'Bearish')
+                    
+                    # Only exit if MTF is not aligned OR if the reversal signal is strong
+                    if not mtf_aligned or stoch_exit:
+                        trade = active_trades[current_pos]
+                        if trade:
+                            trade.exit_time = current_row_lower['date'].isoformat()
+                            trade.exit_price = current_row_lower['close']
+                            completed_trades.append(trade)
                             
-                        active_trades[current_pos] = None
-                        last_exit_time = current_time
-                        current_pos = None
+                            # Update Risk Management: Consecutive Losses
+                            is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
+                                      (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
+                            if is_loss:
+                                consecutive_losses_today += 1
+                            else:
+                                consecutive_losses_today = 0
+                                
+                            active_trades[current_pos] = None
+                            last_exit_time = current_time
+                            current_pos = None
 
             # 3. Exit based on patterns and UTF trend
             if current_pos:
@@ -594,7 +647,34 @@ class OptionStrategy:
                         current_pos = rsi_trend_signal
                         current_active_count += 1
 
-                    # 2. Pattern entry logic (only if not already entered by RSI or if concurrent allowed)
+                    # 2. Entry based on Double Cross
+                    if current_active_count < self.max_concurrent_trades and double_cross_signal:
+                        if active_trades[double_cross_signal] is None:
+                            initial_risk = self._get_initial_risk(current_atr)
+                            
+                            if double_cross_signal == 'CALL':
+                                sl_price = current_row_lower['close'] - initial_risk if self.sl_enabled else None
+                                highest_price_since_entry['CALL'] = current_row_lower['high']
+                            else:
+                                sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
+                                lowest_price_since_entry['PUT'] = current_row_lower['low']
+                                
+                            active_trades[double_cross_signal] = Trade(
+                                option_type=double_cross_signal,
+                                pattern='DOUBLE_CROSS',
+                                confirmation='MACD_STOCH',
+                                entry_time=current_row_lower['date'].isoformat(),
+                                entry_price=current_row_lower['close'],
+                                rsi=current_rsi,
+                                rsi_upper=current_rsi_upper,
+                                stop_loss=sl_price,
+                                initial_risk=initial_risk
+                            )
+                            trades_today += 1
+                            current_pos = double_cross_signal
+                            current_active_count += 1
+
+                    # 3. Pattern entry logic (only if not already entered by RSI or Double Cross)
                     if current_active_count < self.max_concurrent_trades:
                         for category_lower, pats in self.patterns.items():
                             for pattern_func in pats:

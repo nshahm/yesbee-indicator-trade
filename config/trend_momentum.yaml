@@ -1,11 +1,4 @@
 trading_style: "intraday"
-risk_management:
-  capital: 100000
-  risk_per_trade: 1.0 # 1%
-  max_open_trades: 3
-  daily_max_loss: 3.0 # 3%
-  max_trades_per_day: 5
-  max_consecutive_losses_per_day: 2
 
 indicators:
   ema:
@@ -32,3 +25,47 @@ indices:
     timeframes:
       lower: "15minute"
       upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 5
+      max_consecutive_losses_per_day: 2
+      stop_loss:
+        enabled: true
+        fixed:
+          enabled: true
+          points: 25
+  banknifty:
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 5
+      max_consecutive_losses_per_day: 2
+      stop_loss:
+        enabled: true
+        fixed:
+          enabled: true
+          points: 50
+  finnifty:
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 5
+      max_consecutive_losses_per_day: 2
+      stop_loss:
+        enabled: true
+        fixed:
+          enabled: true
+          points: 20

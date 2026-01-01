@@ -9,6 +9,27 @@ indices:
       upper: "60minute"
       # lower: "5minute"
       # upper: "15minute"
+    risk_management:
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: false
+          multiplier: 1.2
+        fixed:
+          enabled: true
+          points: 25
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
 
   banknifty:
     enabled: true
@@ -20,8 +41,29 @@ indices:
       upper: "60minute"
       # lower: "5minute"
       # upper: "15minute"
+    risk_management:
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: false
+          multiplier: 1.2
+        fixed:
+          enabled: true
+          points: 50
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
   finnifty:
-    enabled: true
+    enabled: false
     symbol: "FINNIFTY"
     description: "Nifty Financial Services"
     max_concurrent_trades: 1
@@ -30,32 +72,31 @@ indices:
       upper: "60minute"
       # lower: "5minute"
       # upper: "15minute"
+    risk_management:
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: false
+          multiplier: 1.2
+        fixed:
+          enabled: true
+          points: 20
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
 
 trading_hours:
-  start_time: "09:30"
+  start_time: "09:20"
   end_time: "15:00"
-
-risk_management:
-  max_trades_per_day: 10
-  max_consecutive_losses_per_day: 2
-  stop_loss:
-    enabled: true
-    atr:
-      enabled: false
-      multiplier: 1.2
-    fixed:
-      enabled: true
-      points: 25
-  trailing:
-    enabled: false
-    activation_r: 1.5
-    multiplier: 1.0
-    step_trailing:
-      enabled: true
-      levels:
-        - { profit_r: 0.8, lock_r: 0.0 }
-        - { profit_r: 1.5, lock_r: 0.5 }
-        - { profit_r: 2.5, lock_r: 1.5 }
 
 indicators:
   rsi:
@@ -76,6 +117,18 @@ indicators:
     multiplier: 1.5
     sl_multiplier: 1.5
     trail_multiplier: 1.2
+  macd:
+    enabled: true
+    fast: 12
+    slow: 26
+    signal: 9
+  stochastic:
+    enabled: false
+    k: 14
+    d: 3
+    smooth_k: 3
+    oversold: 20
+    overbought: 80
 
 patterns:
   bullish:

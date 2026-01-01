@@ -54,6 +54,14 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         return atr.iloc[:, 0]
     return atr
 
+def calculate_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
+    macd_df = df.ta.macd(close=df['close'], fast=fast, slow=slow, signal=signal)
+    return macd_df
+
+def calculate_stochastic(df: pd.DataFrame, k: int = 14, d: int = 3, smooth_k: int = 3) -> pd.DataFrame:
+    stoch_df = df.ta.stoch(high=df['high'], low=df['low'], close=df['close'], k=k, d=d, smooth_k=smooth_k)
+    return stoch_df
+
 def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: str, upper_interval: str):
     console = Console()
     table = Table(title=f"📈 Trade Summary: {symbol} ({lower_interval}/{upper_interval})")
@@ -129,17 +137,89 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
         console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
         console.print(f"Total Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
 
+def run_strategy_for_week(strategy_name: str, options: Dict, symbol: str, df_lower_week: pd.DataFrame, df_upper: pd.DataFrame, week_start: pd.Timestamp, week_end: pd.Timestamp) -> List[Trade]:
+    """
+    Helper function to run backtest for a specific week and filter results.
+    """
+    if strategy_name == 'trend_momentum':
+        strategy = TrendMomentumStrategy(options, symbol)
+    elif strategy_name == 'market_structure':
+        strategy = MarketStructureStrategy(options, symbol)
+    else:
+        strategy = OptionStrategy(options, symbol)
+        
+    trades = strategy.run_backtest(df_lower_week, df_upper)
+    
+    # Filter trades to only those that started within this week's boundary
+    # This prevents duplicate trades from context candles
+    filtered_trades = []
+    for t in trades:
+        try:
+            entry_dt = pd.to_datetime(t.entry_time)
+            # Use date comparison for week boundaries
+            if week_start <= entry_dt <= week_end:
+                t.symbol = symbol # Ensure symbol is set
+                filtered_trades.append(t)
+        except:
+            # Fallback if time format is unexpected
+            filtered_trades.append(t)
+            
+    return filtered_trades
+
 def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol: str, lower_interval: str, upper_interval: str, options: Dict = None, strategy_name: str = 'option', from_date: str = None, to_date: str = None):
+    if df_lower.empty or df_upper.empty:
+        with print_lock:
+            print(f"Skipping backtest for {symbol}: Empty data provided.")
+        return []
+        
     console = Console()
     with print_lock:
-        console.print(f"\n[bold blue]Running MTF backtest for {symbol}[/bold blue]")
+        console.print(f"\n[bold blue]Running Parallel Weekly MTF backtest for {symbol}[/bold blue]")
         console.print(f"Strategy: {strategy_name}")
         console.print(f"Lower interval: {lower_interval}, Upper interval: {upper_interval}")
     
     # Calculate RSI values for lower and upper timeframe
-    df_lower['rsi'] = calculate_rsi(df_lower)
-    df_upper['rsi'] = calculate_rsi(df_upper)
+    df_lower.loc[:, 'rsi'] = calculate_rsi(df_lower)
+    df_upper.loc[:, 'rsi'] = calculate_rsi(df_upper)
     
+    # Ensure date is datetime
+    if not df_lower.empty:
+        df_lower['date'] = pd.to_datetime(df_lower['date'])
+    if not df_upper.empty:
+        df_upper['date'] = pd.to_datetime(df_upper['date'])
+
+    # Calculate MACD and Stochastic for Double Cross strategy
+    macd_config = options.get('indicators', {}).get('macd', {})
+    stoch_config = options.get('indicators', {}).get('stochastic', {})
+    
+    if not df_lower.empty:
+        if macd_config.get('enabled', True):
+            macd_lower = calculate_macd(
+                df_lower, 
+                fast=macd_config.get('fast', 12), 
+                slow=macd_config.get('slow', 26), 
+                signal=macd_config.get('signal', 9)
+            )
+            if macd_lower is not None:
+                df_lower = df_lower.loc[:, ~df_lower.columns.duplicated()]
+                macd_lower = macd_lower.loc[:, ~macd_lower.columns.duplicated()]
+                df_lower = pd.concat([df_lower, macd_lower], axis=1)
+            
+        if stoch_config.get('enabled', True):
+            stoch_lower = calculate_stochastic(
+                df_lower,
+                k=stoch_config.get('k', 14),
+                d=stoch_config.get('d', 3),
+                smooth_k=stoch_config.get('smooth_k', 3)
+            )
+            if stoch_lower is not None:
+                df_lower = df_lower.loc[:, ~df_lower.columns.duplicated()]
+                stoch_lower = stoch_lower.loc[:, ~stoch_lower.columns.duplicated()]
+                df_lower = pd.concat([df_lower, stoch_lower], axis=1)
+
+    # Remove any duplicates after all concats
+    df_lower = df_lower.loc[:, ~df_lower.columns.duplicated()]
+
     # Calculate EMAs for Trend Momentum or Market Structure strategy
     if strategy_name in ['trend_momentum', 'market_structure']:
         from indicators import calculate_ema
@@ -162,34 +242,78 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     atr_period = options.get('indicators', {}).get('atr', {}).get('period', 14)
     df_lower['atr'] = calculate_atr(df_lower, period=atr_period)
     
+    with print_lock:
+        console.print(f"Total lower candles (before filtering): {len(df_lower)}")
+    
     # Filter data based on dates AFTER indicator calculation
     if from_date:
         df_lower = df_lower[df_lower['date'].dt.strftime('%Y%m%d') >= from_date]
         df_upper = df_upper[df_upper['date'].dt.strftime('%Y%m%d') >= from_date]
     if to_date:
         df_lower = df_lower[df_lower['date'].dt.strftime('%Y%m%d') <= to_date]
-        # For upper timeframe, we might need a bit more data to match the last lower timeframe candle
         df_upper = df_upper[df_upper['date'].dt.strftime('%Y%m%d') <= to_date]
 
     with print_lock:
-        console.print(f"Total lower candles (filtered): {len(df_lower)}")
+        console.print(f"Total lower candles (after filtering): {len(df_lower)}")
+        if not df_lower.empty:
+            console.print(f"Date range in data: {df_lower['date'].min()} to {df_lower['date'].max()}")
         console.print("-" * 50)
+
+    if df_lower.empty:
+        return []
+
+    # Split into weeks and run in parallel
+    df_lower_reset = df_lower.reset_index(drop=True)
+    # Use isocalendar week for consistent splitting
+    df_lower_reset['week'] = df_lower_reset['date'].dt.isocalendar().week + (df_lower_reset['date'].dt.year * 100)
+    groups = list(df_lower_reset.groupby('week'))
     
-    if strategy_name == 'trend_momentum':
-        strategy = TrendMomentumStrategy(options, symbol)
-    elif strategy_name == 'market_structure':
-        strategy = MarketStructureStrategy(options, symbol)
-    else:
-        strategy = OptionStrategy(options, symbol)
+    with print_lock:
+        console.print(f"Processing {len(groups)} weeks in parallel...")
     
-    completed_trades = strategy.run_backtest(df_lower, df_upper)
+    completed_trades = []
+    # Context candles needed (using 100 to be safe for all strategies)
+    CONTEXT_SIZE = 100
     
-    # Set symbol for each trade
-    for t in completed_trades:
-        t.symbol = symbol
+    with ThreadPoolExecutor(max_workers=min(10, len(groups))) as executor:
+        futures = []
+        for name, group in groups:
+            start_idx = group.index[0]
+            end_idx = group.index[-1]
+            
+            context_start = max(0, start_idx - CONTEXT_SIZE)
+            df_week_with_context = df_lower_reset.iloc[context_start : end_idx + 1].copy()
+            
+            week_start = group['date'].min()
+            week_end = group['date'].max()
+            
+            futures.append(executor.submit(
+                run_strategy_for_week, 
+                strategy_name, 
+                options, 
+                symbol, 
+                df_week_with_context, 
+                df_upper, 
+                week_start, 
+                week_end
+            ))
+            
+        for future in as_completed(futures):
+            try:
+                week_trades = future.result()
+                completed_trades.extend(week_trades)
+            except Exception as e:
+                with print_lock:
+                    print(f"Error in weekly backtest: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+    # Sort trades by entry time
+    completed_trades.sort(key=lambda x: x.entry_time)
         
     display_summary(completed_trades, symbol, lower_interval, upper_interval)
     return completed_trades
+
 
 def display_combined_summary(all_trades: List[Trade]):
     if not all_trades:
@@ -282,7 +406,10 @@ def process_symbol(symbol, backtest_config, options, indices_config, args):
     if not to_date and '_' in date_range:
         to_date = date_range.split('_')[1][:8]
     
-    data_dir = Path(backtest_config.get('cache_dir', 'history_data'))
+    data_dir = Path(backtest_config.get('data_dir', 'history_data'))
+    
+    with print_lock:
+        print(f"Target date range for {symbol}: {from_date} to {to_date}")
     
     def get_df(interval):
         pattern = f"{symbol.lower()}_*_{interval}_*"
