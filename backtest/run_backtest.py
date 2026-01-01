@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 from trade.option_strategy import OptionStrategy, Trade
 from trade.trend_momentum_strategy import TrendMomentumStrategy
+from trade.market_structure_strategy import MarketStructureStrategy
 from backtest.download_backtest_data import BacktestDataDownloader
 from candlestick import Candle
 
@@ -126,8 +127,8 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     df_lower['rsi'] = calculate_rsi(df_lower)
     df_upper['rsi'] = calculate_rsi(df_upper)
     
-    # Calculate EMAs for Trend Momentum strategy
-    if strategy_name == 'trend_momentum':
+    # Calculate EMAs for Trend Momentum or Market Structure strategy
+    if strategy_name in ['trend_momentum', 'market_structure']:
         from indicators import calculate_ema
         def df_to_candles(df):
             return [Candle(date=r['date'].isoformat(), open=r['open'], high=r['high'], low=r['low'], close=r['close']) for _, r in df.iterrows()]
@@ -162,6 +163,8 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     
     if strategy_name == 'trend_momentum':
         strategy = TrendMomentumStrategy(options, symbol)
+    elif strategy_name == 'market_structure':
+        strategy = MarketStructureStrategy(options, symbol)
     else:
         strategy = OptionStrategy(options, symbol)
     
@@ -178,7 +181,7 @@ def main():
     parser.add_argument('--to-date', type=str, help='To date (YYYYMMDD)')
     parser.add_argument('--config', type=str, default='config/backtest.yaml', help='Path to backtest config')
     parser.add_argument('--options', type=str, default='config/options.yaml', help='Path to options config')
-    parser.add_argument('--strategy', type=str, default='option', choices=['option', 'trend_momentum'], help='Strategy to use')
+    parser.add_argument('--strategy', type=str, default='option', choices=['option', 'trend_momentum', 'market_structure'], help='Strategy to use')
     
     args = parser.parse_args()
     
