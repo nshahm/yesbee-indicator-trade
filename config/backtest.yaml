@@ -1,0 +1,28 @@
+backtest:
+  # Date range format: "YYYYMMDDHHmm_YYYYMMDDHHmm"
+  # date_range: "202501010915_202512311530"
+  # date_range: "202512250915_202512311530"
+  # date_range: "202512010915_202512311530"
+  date_range: "202511010915_202511311530"
+  
+  # MTF Intervals
+  lower_interval: "15minute"
+  upper_interval: "1hour"
+  
+  # Data source: "kite_api" to fetch from Kite API, "local_files" to use pre-downloaded files
+  data_source: "kite_api"
+  
+  # Data directory for local files
+  data_dir: "history_data"
+  data_format: "json"
+  
+  # Kite API settings
+  kite_api:
+    enabled: true
+    cache_dir: "history_data"
+    save_format: "json"
+    timeframes:
+      - "1minute"
+      - "5minute"
+      - "15minute"
+      - "60minute"

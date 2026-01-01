@@ -1,0 +1,28 @@
+trading_style: "intraday"
+risk_management:
+  capital: 100000
+  risk_per_trade: 1.0 # 1%
+  max_open_trades: 3
+  daily_max_loss: 3.0 # 3%
+  max_trades_per_day: 5
+  max_consecutive_losses_per_day: 2
+
+indicators:
+  ema:
+    short: 20
+    medium: 50
+    long: 200
+  rsi:
+    period: 14
+    call_threshold: 60
+    put_threshold: 50
+  atr:
+    period: 14
+    sl_multiplier: 1.5
+    trail_multiplier: 1.2
+
+indices:
+  nifty50:
+    timeframes:
+      lower: "5minute"
+      upper: "15minute"

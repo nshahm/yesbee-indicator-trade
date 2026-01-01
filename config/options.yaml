@@ -1,0 +1,85 @@
+indices:
+  nifty50:
+    enabled: true
+    symbol: "NIFTY50"
+    description: "Nifty 50 Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "1hour"
+  banknifty:
+    enabled: false
+    symbol: "BANKNIFTY"
+    description: "Bank Nifty Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "5minute"
+      upper: "15minute"
+  finnifty:
+    enabled: false
+    symbol: "FINNIFTY"
+    description: "Nifty Financial Services"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "5minute"
+      upper: "15minute"
+
+trading_hours:
+  start_time: "09:30"
+  end_time: "15:00"
+
+risk_management:
+  max_trades_per_day: 10
+  max_consecutive_losses_per_day: 2
+
+indicators:
+  rsi:
+    call_threshold: 55  # RSI > 55
+    call_upper_threshold: 80
+    put_threshold: 45   # RSI < 45
+    put_lower_threshold: 20
+    neutral_threshold: 50
+    exit:
+      reversal_number: 5
+  atr:
+    period: 14
+    multiplier: 1.5
+
+patterns:
+  bullish:
+    is_hammer: true
+    is_inverted_hammer: false
+    is_dragonfly_doji: false
+    is_bullish_spinning_top: false
+    is_bullish_kicker: false
+    is_bullish_engulfing: true
+    is_piercing_line: true
+    is_bullish_harami: false
+    is_tweezer_bottom: false
+    is_morning_doji_star: false
+    is_three_white_soldiers: true
+    is_bullish_engulfing_sandwich: false
+    is_bullish_abandoned_baby: true
+    is_morning_star: true
+    is_rising_three: false
+  bearish:
+    is_hanging_man: false
+    is_shooting_star: true
+    is_gravestone_doji: false
+    is_bearish_spinning_top: false
+    is_bearish_engulfing: true
+    is_bearish_kicker: false
+    is_dark_cloud_cover: true
+    is_bearish_harami: false
+    is_tweezer_top: false
+    is_falling_three: false
+    is_bearish_engulfing_sandwich: false
+    is_three_black_crows: true
+    is_evening_doji_star: false
+    is_bearish_abandoned_baby: true
+    is_evening_star: true
+  neutral:
+    is_spinning_top: true
+    is_doji: true
+    is_harami: true
+    is_marubozu: true

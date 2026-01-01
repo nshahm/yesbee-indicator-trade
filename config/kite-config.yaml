@@ -1,0 +1,82 @@
+kite:
+  api:
+    access_token: ksSLDw5EsvHSHx5iKEzBfSQWxVqf444G
+    key: l22cbxdzu3rha76r
+    secret: 1p2tjue1yjyjvszlgoywzx0jvs9lt6z2
+    user_id: TBZ296
+  credentials:
+    auto_refresh_token: true
+    token_refresh_interval_hours: 24
+  data_retention:
+    max_cache_size_mb: 100
+    order_history_days: 90
+    trade_history_days: 90
+  instruments:
+    indices:
+      BANKNIFTY:
+        lot_size: 1
+        tick_size: 0.05
+        token: '260105'
+      FINNIFTY:
+        lot_size: 1
+        tick_size: 0.05
+        token: '257801'
+      NIFTY50:
+        lot_size: 1
+        tick_size: 0.05
+        token: '256265'
+    symbols:
+    - NIFTY50
+    - BANKNIFTY
+    - FINNIFTY
+  logging:
+    backup_count: 5
+    file: logs/kite_trading.log
+    level: INFO
+    max_bytes: 10485760
+  polling:
+    enabled: false
+    interval_seconds: 5
+  rate_limiting:
+    burst_size: 10
+    enabled: true
+    requests_per_second: 3
+  timeouts:
+    connection_timeout_seconds: 10
+    request_timeout_seconds: 30
+    websocket_timeout_seconds: 60
+  trading:
+    exchange: NSE
+    order_type: MARKET
+    order_types:
+      LIMIT: Limit Order
+      MARKET: Market Order
+    product: MIS
+    products:
+      CNC: Delivery
+      MIS: Intraday
+      NRML: Normal
+  websocket:
+    enabled: true
+    max_reconnect_attempts: 5
+    reconnect: true
+    reconnect_delay_seconds: 5
+live_trading:
+  enabled: false
+  mode: paper
+  notifications:
+    email: ''
+    enabled: false
+    webhook_url: ''
+  risk_management:
+    max_daily_loss: 2000
+    max_loss_per_trade: 500
+    max_position_size: 100
+  settings:
+    check_interval_seconds: 60
+    max_orders_per_day: 50
+    max_positions: 5
+    signal_cooldown_seconds: 60
+  symbols:
+  - NIFTY50
+  - BANKNIFTY

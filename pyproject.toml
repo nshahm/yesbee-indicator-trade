@@ -1,0 +1,21 @@
+[project]
+name = "yesbee-indicator-trade"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Shahm Nattarshah",email = "shahm.nattarshah@airscale.co"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # System dependencies: curl, jq, openssl (required for auth-kite.sh)
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "kiteconnect (>=5.0.1,<6.0.0)",
+    "urllib3 (<2)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
