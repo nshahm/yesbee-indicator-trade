@@ -18,24 +18,27 @@ class Trade:
     symbol: Optional[str] = None
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
+    adx: Optional[float] = None
     stop_loss: Optional[float] = None
     initial_risk: Optional[float] = None
     exit_time: Optional[str] = None
     exit_price: Optional[float] = None
 
 class OptionSignal:
-    def __init__(self, action: str, option_type: str, pattern: str, rsi_value: Optional[float] = None, rsi_upper: Optional[float] = None, confirmation: str = "N/A"):
+    def __init__(self, action: str, option_type: str, pattern: str, rsi_value: Optional[float] = None, rsi_upper: Optional[float] = None, adx_value: Optional[float] = None, confirmation: str = "N/A"):
         self.action = action  # 'ENTRY' or 'EXIT'
         self.option_type = option_type  # 'CALL' or 'PUT'
         self.pattern = pattern
         self.rsi_value = rsi_value
         self.rsi_upper = rsi_upper
+        self.adx_value = adx_value
         self.confirmation = confirmation
 
     def __repr__(self):
         rsi_str = f", RSI: {self.rsi_value:.2f}" if self.rsi_value is not None else ""
         rsi_u_str = f", RSI_U: {self.rsi_upper:.2f}" if self.rsi_upper is not None else ""
-        return f"{self.action} {self.option_type} (Pattern: {self.pattern}, Conf: {self.confirmation}{rsi_str}{rsi_u_str})"
+        adx_str = f", ADX: {self.adx_value:.2f}" if self.adx_value is not None else ""
+        return f"{self.action} {self.option_type} (Pattern: {self.pattern}, Conf: {self.confirmation}{rsi_str}{rsi_u_str}{adx_str})"
 
 PATTERN_CONFIRMATIONS = {
     # Single
@@ -111,6 +114,7 @@ def get_option_signals(
     current_position: Optional[str] = None,
     rsi_value: Optional[float] = None,
     rsi_upper: Optional[float] = None,
+    adx_value: Optional[float] = None,
     rsi_config: Optional[Dict] = None,
     df: Optional[pd.DataFrame] = None,
     index: Optional[int] = None
@@ -121,9 +125,12 @@ def get_option_signals(
     """
     signals = []
     
-    # Use value from DataFrame if provided and rsi_value is None
-    if rsi_value is None and df is not None and index is not None and 'rsi' in df.columns:
-        rsi_value = df.iloc[index]['rsi']
+    # Use value from DataFrame if provided and rsi_value/adx_value is None
+    if df is not None and index is not None:
+        if rsi_value is None and 'rsi' in df.columns:
+            rsi_value = df.iloc[index]['rsi']
+        if adx_value is None and 'ADX' in df.columns:
+            adx_value = df.iloc[index]['ADX']
     
     confirmation = PATTERN_CONFIRMATIONS.get(pattern_name, "N/A")
     
@@ -163,10 +170,10 @@ def get_option_signals(
         if upper_category:
             if category == 'Bullish' and upper_category == 'Bullish':
                 if rsi_call_ok:
-                    signals.append(OptionSignal('ENTRY', 'CALL', pattern_name, rsi_value, rsi_upper, confirmation))
+                    signals.append(OptionSignal('ENTRY', 'CALL', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
             elif category == 'Bearish' and upper_category == 'Bearish':
                 if rsi_put_ok:
-                    signals.append(OptionSignal('ENTRY', 'PUT', pattern_name, rsi_value, rsi_upper, confirmation))
+                    signals.append(OptionSignal('ENTRY', 'PUT', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
         # No entry if upper_category is not available (Strict MTF)
             
     # 2. EXIT LOGIC (Reversal patterns)
@@ -184,18 +191,18 @@ def get_option_signals(
     if current_position == 'CALL' and category == 'Bearish':
         # Exit if it's a strong reversal OR if upper timeframe is no longer bullish and RSI confirms
         if is_strong_pattern or (not mtf_aligned and (rsi_value is not None and rsi_value < neutral_rsi)):
-            signals.append(OptionSignal('EXIT', 'CALL', pattern_name, rsi_value, rsi_upper, confirmation))
+            signals.append(OptionSignal('EXIT', 'CALL', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
     elif current_position == 'PUT' and category == 'Bullish':
         if is_strong_pattern or (not mtf_aligned and (rsi_value is not None and rsi_value > neutral_rsi)):
-            signals.append(OptionSignal('EXIT', 'PUT', pattern_name, rsi_value, rsi_upper, confirmation))
+            signals.append(OptionSignal('EXIT', 'PUT', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
 
     # 3. Multi-timeframe Trend Change Exits
     # Only exit on actual trend reversal in MTF, not just Neutral
     if upper_category and current_position:
         if current_position == 'CALL' and upper_category == 'Bearish':
-            signals.append(OptionSignal('EXIT', 'CALL', 'MTF_REVERSAL', rsi_value, rsi_upper, confirmation))
+            signals.append(OptionSignal('EXIT', 'CALL', 'MTF_REVERSAL', rsi_value, rsi_upper, adx_value, confirmation))
         elif current_position == 'PUT' and upper_category == 'Bullish':
-            signals.append(OptionSignal('EXIT', 'PUT', 'MTF_REVERSAL', rsi_value, rsi_upper, confirmation))
+            signals.append(OptionSignal('EXIT', 'PUT', 'MTF_REVERSAL', rsi_value, rsi_upper, adx_value, confirmation))
         
     return signals
 
@@ -280,6 +287,7 @@ class OptionStrategy:
             
             current_rsi = current_row_lower.get('rsi')
             current_atr = current_row_lower.get('atr')
+            current_adx = current_row_lower.get('ADX')
             previous_rsi = prev_row_lower.get('rsi') if prev_row_lower is not None else None
             current_time = current_row_lower['date']
             
@@ -543,6 +551,7 @@ class OptionStrategy:
                                 current_position=current_pos,
                                 rsi_value=current_rsi,
                                 rsi_upper=current_rsi_upper,
+                                adx_value=current_adx,
                                 rsi_config=self.rsi_config,
                                 df=df_lower,
                                 index=i-1
@@ -580,6 +589,7 @@ class OptionStrategy:
                         current_position=current_pos,
                         rsi_value=current_rsi,
                         rsi_upper=current_rsi_upper,
+                        adx_value=current_adx,
                         rsi_config=self.rsi_config
                     )
                     for signal in utf_exit_signals:
@@ -640,6 +650,7 @@ class OptionStrategy:
                             entry_price=current_row_lower['close'],
                             rsi=current_rsi,
                             rsi_upper=current_rsi_upper,
+                            adx=current_adx,
                             stop_loss=sl_price,
                             initial_risk=initial_risk
                         )
@@ -667,6 +678,7 @@ class OptionStrategy:
                                 entry_price=current_row_lower['close'],
                                 rsi=current_rsi,
                                 rsi_upper=current_rsi_upper,
+                                adx=current_adx,
                                 stop_loss=sl_price,
                                 initial_risk=initial_risk
                             )
@@ -687,6 +699,7 @@ class OptionStrategy:
                                         current_position=current_pos,
                                         rsi_value=current_rsi,
                                         rsi_upper=current_rsi_upper,
+                                        adx_value=current_adx,
                                         rsi_config=self.rsi_config
                                     )
                                     
@@ -710,6 +723,7 @@ class OptionStrategy:
                                                     entry_price=current_row_lower['close'],
                                                     rsi=current_rsi,
                                                     rsi_upper=current_rsi_upper,
+                                                    adx=current_adx,
                                                     stop_loss=sl_price,
                                                     initial_risk=initial_risk
                                                 )

@@ -77,7 +77,7 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
     table.add_column("Entry", justify="right", style="green")
     table.add_column("Exit", justify="right", style="red")
     table.add_column("Stop Loss", justify="right", style="yellow")
-    table.add_column("RSI (L/U)", justify="right", style="cyan")
+    table.add_column("RSI (L/U) | ADX", justify="right", style="cyan")
     table.add_column("P&L", justify="right", style="bold")
     table.add_column("R:R", justify="right", style="blue")
     table.add_column("Result", justify="center")
@@ -115,7 +115,8 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
         
         rsi_l = f"{t.rsi:.1f}" if getattr(t, 'rsi', None) is not None else "N/A"
         rsi_u = f"{t.rsi_upper:.1f}" if getattr(t, 'rsi_upper', None) is not None else "N/A"
-        rsi_display = f"{rsi_l}/{rsi_u}"
+        adx_val = f"{t.adx:.1f}" if getattr(t, 'adx', None) is not None else "N/A"
+        rsi_display = f"{rsi_l}/{rsi_u} | {adx_val}"
 
         table.add_row(
             t.option_type,
@@ -243,11 +244,16 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
                 return pd.Series([np.nan] * len(df), index=df.index)
             return s
         
-        df_lower['ema20'] = get_ema_series(df_lower, 20)
-        df_lower['ema50'] = get_ema_series(df_lower, 50)
-        df_lower['ema200'] = get_ema_series(df_lower, 200)
-        df_upper['ema50'] = get_ema_series(df_upper, 50)
-        df_upper['ema200'] = get_ema_series(df_upper, 200)
+        ema_config = options.get('indicators', {}).get('ema', {})
+        short_ema = ema_config.get('short', 20)
+        medium_ema = ema_config.get('medium', 50)
+        long_ema = ema_config.get('long', 200)
+
+        df_lower[f'ema{short_ema}'] = get_ema_series(df_lower, short_ema)
+        df_lower[f'ema{medium_ema}'] = get_ema_series(df_lower, medium_ema)
+        df_lower[f'ema{long_ema}'] = get_ema_series(df_lower, long_ema)
+        df_upper[f'ema{medium_ema}'] = get_ema_series(df_upper, medium_ema)
+        df_upper[f'ema{long_ema}'] = get_ema_series(df_upper, long_ema)
 
     # Calculate ATR for stop loss
     atr_period = options.get('indicators', {}).get('atr', {}).get('period', 14)

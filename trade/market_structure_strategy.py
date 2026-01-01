@@ -171,7 +171,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 if has_hh and has_lh and hl_price is not None:
                     if row['close'] < hl_price:
                         # Extra conditions from hhll.md
-                        if row['rsi'] < 50 and row['close'] < row['ema20'] and volume_ok and adx_ok:
+                        if row['rsi'] < 50 and row['close'] < row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
                             active_trade = Trade(
                                 option_type='PUT',
                                 pattern='HH-LH-Breakdown',
@@ -179,6 +179,8 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                                 entry_time=current_time.isoformat(),
                                 entry_price=row['close'],
                                 rsi=row['rsi'],
+                                rsi_upper=last_upper['rsi'],
+                                adx=adx_value,
                                 stop_loss=lh_price + (row['atr'] * 0.3) if lh_price else None,
                                 initial_risk=self._get_initial_risk(row['atr'])
                             )
@@ -193,7 +195,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 if has_ll and ms_result.get('lh_price') is not None:
                     lh_val = ms_result['lh_price']
                     if row['close'] > lh_val:
-                        if row['rsi'] > 50 and row['close'] > row['ema20'] and volume_ok and adx_ok:
+                        if row['rsi'] > 50 and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
                             active_trade = Trade(
                                 option_type='CALL',
                                 pattern='LL-LH-Breakout',
@@ -201,6 +203,8 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                                 entry_time=current_time.isoformat(),
                                 entry_price=row['close'],
                                 rsi=row['rsi'],
+                                rsi_upper=last_upper['rsi'],
+                                adx=adx_value,
                                 stop_loss=ll_price - (row['atr'] * 0.3) if ll_price else None,
                                 initial_risk=self._get_initial_risk(row['atr'])
                             )

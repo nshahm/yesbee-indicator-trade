@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import candlestick
 from candlestick import Candle, is_bullish_engulfing, is_hammer
-from indicators import calculate_ema, calculate_rsi, calculate_atr, calculate_supertrend
+from indicators import calculate_ema, calculate_rsi, calculate_atr
 
 @dataclass
 class Trade:
@@ -18,6 +18,7 @@ class Trade:
     quantity: int = 0
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
+    adx: Optional[float] = None
     stop_loss: Optional[float] = None
     initial_risk: Optional[float] = None
     exit_time: Optional[str] = None
@@ -64,6 +65,11 @@ class TrendMomentumStrategy:
         adx_config = indicator_config.get('adx', {})
         self.adx_enabled = adx_config.get('enabled', True)
         self.adx_threshold = adx_config.get('threshold', 18)
+        
+        ema_config = indicator_config.get('ema', {})
+        self.short_ema = ema_config.get('short', 20)
+        self.medium_ema = ema_config.get('medium', 50)
+        self.long_ema = ema_config.get('long', 200)
         
         # Multipliers from system.md
         atr_config = indicator_config.get('atr', {})
@@ -217,7 +223,7 @@ class TrendMomentumStrategy:
                     elif row['rsi'] < 40:
                         exit_reason = "RSI Reversal"
                         exit_price = row['close']
-                    elif row['close'] < row['ema50']:
+                    elif row['close'] < row[f'ema{self.medium_ema}']:
                         exit_reason = "Trend Breakdown"
                         exit_price = row['close']
                 else: # PUT / SHORT
@@ -268,7 +274,7 @@ class TrendMomentumStrategy:
                     elif row['rsi'] > 60: # Bearish RSI reversal
                         exit_reason = "RSI Reversal"
                         exit_price = row['close']
-                    elif row['close'] > row['ema50']:
+                    elif row['close'] > row[f'ema{self.medium_ema}']:
                         exit_reason = "Trend Breakdown"
                         exit_price = row['close']
 
@@ -305,17 +311,17 @@ class TrendMomentumStrategy:
 
                 # Check Entry Conditions
                 
-                ema200_lower = row.get('ema200', 0)
-                ema200_upper = last_upper.get('ema200', 0)
+                ema_long_lower = row.get(f'ema{self.long_ema}', 0)
+                ema_long_upper = last_upper.get(f'ema{self.long_ema}', 0)
                 
                 # 1. LONG Entry Conditions
                 adx_value = row.get('ADX', 0)
                 adx_ok = adx_value > self.adx_threshold if self.adx_enabled else True
                 
                 trend_long_ok = (
-                    row['close'] > row['ema50'] and 
-                    row['ema20'] > row['ema50'] and 
-                    (np.isnan(ema200_lower) or row['close'] > ema200_lower) and
+                    row['close'] > row[f'ema{self.medium_ema}'] and 
+                    row[f'ema{self.short_ema}'] > row[f'ema{self.medium_ema}'] and 
+                    (np.isnan(ema_long_lower) or row['close'] > ema_long_lower) and
                     adx_ok
                 )
                 rsi_long_ok = (
@@ -323,16 +329,16 @@ class TrendMomentumStrategy:
                     row['rsi'] > prev_row['rsi']
                 )
                 htf_long_ok = (
-                    last_upper['close'] > last_upper['ema50'] and 
-                    (np.isnan(ema200_upper) or last_upper['close'] > ema200_upper) and
+                    last_upper['close'] > last_upper[f'ema{self.medium_ema}'] and 
+                    (np.isnan(ema_long_upper) or last_upper['close'] > ema_long_upper) and
                     (np.isnan(last_upper['rsi']) or self.rsi_upper_call_threshold < last_upper['rsi'] < self.rsi_upper_call_max)
                 )
                 
                 # 2. SHORT Entry Conditions (Optional as per system.md)
                 trend_short_ok = (
-                    row['close'] < row['ema50'] and 
-                    row['ema20'] < row['ema50'] and 
-                    (np.isnan(ema200_lower) or row['close'] < ema200_lower) and
+                    row['close'] < row[f'ema{self.medium_ema}'] and 
+                    row[f'ema{self.short_ema}'] < row[f'ema{self.medium_ema}'] and 
+                    (np.isnan(ema_long_lower) or row['close'] < ema_long_lower) and
                     adx_ok
                 )
                 rsi_short_ok = (
@@ -340,8 +346,8 @@ class TrendMomentumStrategy:
                     row['rsi'] < prev_row['rsi']
                 )
                 htf_short_ok = (
-                    last_upper['close'] < last_upper['ema50'] and 
-                    (np.isnan(ema200_upper) or last_upper['close'] < ema200_upper) and
+                    last_upper['close'] < last_upper[f'ema{self.medium_ema}'] and 
+                    (np.isnan(ema_long_upper) or last_upper['close'] < ema_long_upper) and
                     (np.isnan(last_upper['rsi']) or self.rsi_upper_put_min < last_upper['rsi'] < self.rsi_upper_put_threshold)
                 )
 
@@ -362,6 +368,7 @@ class TrendMomentumStrategy:
                         quantity=quantity,
                         rsi=row['rsi'],
                         rsi_upper=last_upper['rsi'],
+                        adx=adx_value,
                         stop_loss=initial_sl,
                         initial_risk=initial_risk
                     )
@@ -383,6 +390,7 @@ class TrendMomentumStrategy:
                         quantity=quantity,
                         rsi=row['rsi'],
                         rsi_upper=last_upper['rsi'],
+                        adx=adx_value,
                         stop_loss=initial_sl,
                         initial_risk=initial_risk
                     )
