@@ -15,6 +15,7 @@ class Trade:
     confirmation: str
     entry_time: str
     entry_price: float
+    symbol: Optional[str] = None
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
     stop_loss: Optional[float] = None
@@ -249,6 +250,9 @@ class OptionStrategy:
         }
 
     def run_backtest(self, df_lower: pd.DataFrame, df_upper: pd.DataFrame) -> List[Trade]:
+        if df_lower.empty or df_upper.empty:
+            return []
+            
         active_trades = {'CALL': None, 'PUT': None}
         completed_trades: List[Trade] = []
         last_exit_time: Optional[datetime] = None

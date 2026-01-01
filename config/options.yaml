@@ -18,6 +18,8 @@ indices:
     timeframes:
       lower: "15minute"
       upper: "60minute"
+      # lower: "5minute"
+      # upper: "15minute"
   finnifty:
     enabled: true
     symbol: "FINNIFTY"
@@ -26,6 +28,8 @@ indices:
     timeframes:
       lower: "15minute"
       upper: "60minute"
+      # lower: "5minute"
+      # upper: "15minute"
 
 trading_hours:
   start_time: "09:30"

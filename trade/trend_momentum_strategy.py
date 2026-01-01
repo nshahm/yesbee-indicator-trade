@@ -14,6 +14,7 @@ class Trade:
     confirmation: str
     entry_time: str
     entry_price: float
+    symbol: Optional[str] = None
     quantity: int = 0
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None

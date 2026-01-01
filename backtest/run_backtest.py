@@ -5,11 +5,16 @@ import yaml
 import pandas as pd
 import numpy as np
 import pandas_ta as ta
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
 from rich.console import Console
 from rich.table import Table
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Global lock for thread-safe printing
+print_lock = threading.Lock()
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent
@@ -114,20 +119,22 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
             result_text
         )
 
-    console.print(table)
-    
-    # Performance Metrics
-    total_trades = wins + losses
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
-    console.print(f"\n[bold]Performance Metrics:[/bold]")
-    console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
-    console.print(f"Total Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
+    with print_lock:
+        console.print(table)
+        
+        # Performance Metrics
+        total_trades = wins + losses
+        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+        console.print(f"\n[bold]Performance Metrics:[/bold]")
+        console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
+        console.print(f"Total Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
 
 def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol: str, lower_interval: str, upper_interval: str, options: Dict = None, strategy_name: str = 'option', from_date: str = None, to_date: str = None):
     console = Console()
-    console.print(f"\n[bold blue]Running MTF backtest for {symbol}[/bold blue]")
-    console.print(f"Strategy: {strategy_name}")
-    console.print(f"Lower interval: {lower_interval}, Upper interval: {upper_interval}")
+    with print_lock:
+        console.print(f"\n[bold blue]Running MTF backtest for {symbol}[/bold blue]")
+        console.print(f"Strategy: {strategy_name}")
+        console.print(f"Lower interval: {lower_interval}, Upper interval: {upper_interval}")
     
     # Calculate RSI values for lower and upper timeframe
     df_lower['rsi'] = calculate_rsi(df_lower)
@@ -164,8 +171,9 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
         # For upper timeframe, we might need a bit more data to match the last lower timeframe candle
         df_upper = df_upper[df_upper['date'].dt.strftime('%Y%m%d') <= to_date]
 
-    console.print(f"Total lower candles (filtered): {len(df_lower)}")
-    console.print("-" * 50)
+    with print_lock:
+        console.print(f"Total lower candles (filtered): {len(df_lower)}")
+        console.print("-" * 50)
     
     if strategy_name == 'trend_momentum':
         strategy = TrendMomentumStrategy(options, symbol)
@@ -176,7 +184,180 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     
     completed_trades = strategy.run_backtest(df_lower, df_upper)
     
+    # Set symbol for each trade
+    for t in completed_trades:
+        t.symbol = symbol
+        
     display_summary(completed_trades, symbol, lower_interval, upper_interval)
+    return completed_trades
+
+def display_combined_summary(all_trades: List[Trade]):
+    if not all_trades:
+        return
+        
+    console = Console()
+    table = Table(title="📊 [bold blue]Combined Performance Summary (All Indices)[/bold blue]")
+    
+    table.add_column("Symbol", style="cyan")
+    table.add_column("Type", style="cyan")
+    table.add_column("Entry Time", style="green")
+    table.add_column("Exit Time", style="red")
+    table.add_column("Qty", justify="right", style="magenta")
+    table.add_column("Entry", justify="right", style="green")
+    table.add_column("Exit", justify="right", style="red")
+    table.add_column("P&L", justify="right", style="bold")
+    table.add_column("Result", justify="center")
+
+    total_pnl = 0
+    wins = 0
+    losses = 0
+
+    # Sort all trades by entry time
+    sorted_trades = sorted(all_trades, key=lambda x: x.entry_time)
+
+    for t in sorted_trades:
+        if t.entry_time == t.exit_time:
+            continue
+            
+        pnl_per_unit = t.exit_price - t.entry_price if t.option_type == 'CALL' else t.entry_price - t.exit_price
+        quantity = getattr(t, 'quantity', 1) or 1
+        total_trade_pnl = pnl_per_unit * quantity
+        total_pnl += total_trade_pnl
+        
+        pnl_style = "green" if total_trade_pnl > 0 else "red"
+        result_text = "[green]WIN[/green]" if total_trade_pnl > 0 else "[red]LOSS[/red]"
+        
+        if total_trade_pnl > 0: wins += 1
+        else: losses += 1
+        
+        # Format times for display
+        try:
+            e_t = t.entry_time.split('T')[0] + " " + t.entry_time.split('T')[1][:5]
+            x_t = t.exit_time.split('T')[0] + " " + t.exit_time.split('T')[1][:5]
+        except:
+            e_t = t.entry_time
+            x_t = t.exit_time
+
+        table.add_row(
+            getattr(t, 'symbol', 'N/A'),
+            t.option_type,
+            e_t,
+            x_t,
+            str(getattr(t, 'quantity', 'N/A')),
+            f"{t.entry_price:.2f}",
+            f"{t.exit_price:.2f}",
+            f"[{pnl_style}]{total_trade_pnl:.2f}[/{pnl_style}]",
+            result_text
+        )
+
+    console.print("\n")
+    console.print(table)
+    
+    # Performance Metrics
+    total_trades = wins + losses
+    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    console.print(f"\n[bold]Combined Performance Metrics:[/bold]")
+    console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
+    console.print(f"Cumulative Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
+    console.print("-" * 50 + "\n")
+
+def process_symbol(symbol, backtest_config, options, indices_config, args):
+    # Priority: Command line > backtest.yaml > options.yaml indices > default
+    backtest_lower = backtest_config.get('lower_interval')
+    backtest_upper = backtest_config.get('upper_interval')
+    
+    # Get intervals from options.yaml indices
+    index_options = indices_config.get(symbol.lower(), {})
+    timeframes = index_options.get('timeframes', {})
+    
+    lower_interval = args.lower_interval or backtest_lower or timeframes.get('lower', '5minute')
+    upper_interval = args.upper_interval or backtest_upper or timeframes.get('upper', '15minute')
+    
+    date_range = backtest_config.get('date_range', '')
+    from_date = args.from_date
+    to_date = args.to_date
+    
+    if not from_date and '_' in date_range:
+        from_date = date_range.split('_')[0][:8]
+    if not to_date and '_' in date_range:
+        to_date = date_range.split('_')[1][:8]
+    
+    data_dir = Path(backtest_config.get('cache_dir', 'history_data'))
+    
+    def get_df(interval):
+        pattern = f"{symbol.lower()}_*_{interval}_*"
+        files = list(data_dir.glob(f"{pattern}.json"))
+        if not files:
+            return pd.DataFrame()
+        
+        file_path = files[0]
+        if from_date or to_date:
+            for f in files:
+                parts = f.stem.split('_')
+                if len(parts) >= 5:
+                    file_from = parts[-2][:8]
+                    file_to = parts[-1][:8]
+                    if (not from_date or file_to >= from_date) and (not to_date or file_from <= to_date):
+                        file_path = f
+                        break
+        
+        with print_lock:
+            print(f"Using {interval} data from: {file_path}")
+        df = load_data(file_path)
+        return df
+
+    df_lower = get_df(lower_interval)
+    df_upper = get_df(upper_interval)
+    
+    if df_lower.empty or df_upper.empty:
+        with print_lock:
+            print(f"Missing data locally for {symbol}. Attempting to download...")
+        
+        # Determine date range for download
+        # Use full range from config if possible, otherwise use args
+        full_date_range = backtest_config.get('date_range', '')
+        if '_' in full_date_range:
+            from_full, to_full = full_date_range.split('_')
+        else:
+            from_full = f"{from_date}0915" if from_date else "202501010915"
+            to_full = f"{to_date}1530" if to_date else datetime.now().strftime('%Y%m%d%H%M')
+            
+        downloader = BacktestDataDownloader(
+            backtest_config_path=args.config,
+            options_config_path=args.options
+        )
+        
+        indices = {symbol.upper(): ''}
+        timeframes_to_download = []
+        if df_lower.empty: timeframes_to_download.append(lower_interval)
+        if df_upper.empty: timeframes_to_download.append(upper_interval)
+        
+        try:
+            f_dt = datetime.strptime(from_full, '%Y%m%d%H%M')
+            t_dt = datetime.strptime(to_full, '%Y%m%d%H%M')
+            # Handle inverted range if any
+            if t_dt < f_dt:
+                f_dt, t_dt = t_dt, f_dt
+        except:
+            f_dt, t_dt = downloader.get_date_range()
+            
+        downloader.download_index_data(
+            indices=indices,
+            timeframes=timeframes_to_download,
+            from_date=f_dt,
+            to_date=t_dt
+        )
+        
+        # Retry loading
+        if df_lower.empty: df_lower = get_df(lower_interval)
+        if df_upper.empty: df_upper = get_df(upper_interval)
+
+    if df_lower.empty or df_upper.empty:
+        with print_lock:
+            print(f"Unable to resolve missing data for {symbol} ({lower_interval}, {upper_interval})")
+        return []
+
+    return run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
 
 def main():
     parser = argparse.ArgumentParser(description='Backtest candlestick patterns on historical data')
@@ -209,100 +390,24 @@ def main():
             print("No enabled indices found in config.")
             return
     
-    for symbol in symbols_to_run:
-        # Priority: Command line > backtest.yaml > options.yaml indices > default
-        backtest_lower = backtest_config.get('lower_interval')
-        backtest_upper = backtest_config.get('upper_interval')
+    all_trades = []
+    
+    with ThreadPoolExecutor(max_workers=len(symbols_to_run)) as executor:
+        future_to_symbol = {executor.submit(process_symbol, symbol, backtest_config, options, indices_config, args): symbol for symbol in symbols_to_run}
         
-        # Get intervals from options.yaml indices
-        index_options = indices_config.get(symbol.lower(), {})
-        timeframes = index_options.get('timeframes', {})
-        
-        lower_interval = args.lower_interval or backtest_lower or timeframes.get('lower', '5minute')
-        upper_interval = args.upper_interval or backtest_upper or timeframes.get('upper', '15minute')
-        
-        date_range = backtest_config.get('date_range', '')
-        from_date = args.from_date
-        to_date = args.to_date
-        
-        if not from_date and '_' in date_range:
-            from_date = date_range.split('_')[0][:8]
-        if not to_date and '_' in date_range:
-            to_date = date_range.split('_')[1][:8]
-        
-        data_dir = Path(backtest_config.get('cache_dir', 'history_data'))
-        
-        def get_df(interval):
-            pattern = f"{symbol.lower()}_*_{interval}_*"
-            files = list(data_dir.glob(f"{pattern}.json"))
-            if not files:
-                return pd.DataFrame()
-            
-            file_path = files[0]
-            if from_date or to_date:
-                for f in files:
-                    parts = f.stem.split('_')
-                    if len(parts) >= 5:
-                        file_from = parts[-2][:8]
-                        file_to = parts[-1][:8]
-                        if (not from_date or file_to >= from_date) and (not to_date or file_from <= to_date):
-                            file_path = f
-                            break
-            
-            print(f"Using {interval} data from: {file_path}")
-            df = load_data(file_path)
-            return df
-
-        df_lower = get_df(lower_interval)
-        df_upper = get_df(upper_interval)
-        
-        if df_lower.empty or df_upper.empty:
-            print(f"Missing data locally for {symbol}. Attempting to download...")
-            
-            # Determine date range for download
-            # Use full range from config if possible, otherwise use args
-            full_date_range = backtest_config.get('date_range', '')
-            if '_' in full_date_range:
-                from_full, to_full = full_date_range.split('_')
-            else:
-                from_full = f"{from_date}0915" if from_date else "202501010915"
-                to_full = f"{to_date}1530" if to_date else datetime.now().strftime('%Y%m%d%H%M')
-                
-            downloader = BacktestDataDownloader(
-                backtest_config_path=args.config,
-                options_config_path=args.options
-            )
-            
-            indices = {symbol.upper(): ''}
-            timeframes_to_download = []
-            if df_lower.empty: timeframes_to_download.append(lower_interval)
-            if df_upper.empty: timeframes_to_download.append(upper_interval)
-            
+        for future in as_completed(future_to_symbol):
+            symbol = future_to_symbol[future]
             try:
-                f_dt = datetime.strptime(from_full, '%Y%m%d%H%M')
-                t_dt = datetime.strptime(to_full, '%Y%m%d%H%M')
-                # Handle inverted range if any
-                if t_dt < f_dt:
-                    f_dt, t_dt = t_dt, f_dt
-            except:
-                f_dt, t_dt = downloader.get_date_range()
-                
-            downloader.download_index_data(
-                indices=indices,
-                timeframes=timeframes_to_download,
-                from_date=f_dt,
-                to_date=t_dt
-            )
+                symbol_trades = future.result()
+                if symbol_trades:
+                    all_trades.extend(symbol_trades)
+            except Exception as exc:
+                print(f'{symbol} generated an exception: {exc}')
+                import traceback
+                traceback.print_exc()
             
-            # Retry loading
-            if df_lower.empty: df_lower = get_df(lower_interval)
-            if df_upper.empty: df_upper = get_df(upper_interval)
-
-        if df_lower.empty or df_upper.empty:
-            print(f"Unable to resolve missing data for {symbol} ({lower_interval}, {upper_interval})")
-            continue
-
-        run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
+    if len(symbols_to_run) > 1:
+        display_combined_summary(all_trades)
 
 if __name__ == "__main__":
     main()
