@@ -18,6 +18,7 @@ class Trade:
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
     stop_loss: Optional[float] = None
+    initial_risk: Optional[float] = None
     exit_time: Optional[str] = None
     exit_price: Optional[float] = None
     pnl: Optional[float] = None
@@ -34,6 +35,13 @@ class TrendMomentumStrategy:
         self.max_open_trades = risk_config.get('max_open_trades', 3)
         self.max_trades_per_day = risk_config.get('max_trades_per_day', 0)
         self.max_consecutive_losses_per_day = risk_config.get('max_consecutive_losses_per_day', 0)
+        
+        self.sl_config = risk_config.get('stop_loss', {})
+        self.trailing_config = risk_config.get('trailing', {})
+        self.sl_enabled = self.sl_config.get('enabled', True)
+        self.atr_sl_config = self.sl_config.get('atr', {})
+        self.fixed_sl_config = self.sl_config.get('fixed', {})
+        self.trailing_enabled = self.trailing_config.get('enabled', True)
         
         self.trading_style = options.get('trading_style', 'intraday')
         
@@ -58,6 +66,20 @@ class TrendMomentumStrategy:
         else: # swing
             self.sl_multiplier = atr_config.get('sl_multiplier', 2.0)
             self.trail_multiplier = atr_config.get('trail_multiplier', 1.5)
+
+    def _get_initial_risk(self, current_atr: float) -> float:
+        risks = []
+        if self.atr_sl_config.get('enabled', True):
+            multiplier = self.atr_sl_config.get('multiplier', self.sl_multiplier)
+            risks.append(multiplier * (current_atr if not np.isnan(current_atr) else 0))
+        
+        if self.fixed_sl_config.get('enabled', False):
+            risks.append(self.fixed_sl_config.get('points', 0))
+            
+        if not risks:
+            return self.sl_multiplier * (current_atr if not np.isnan(current_atr) else 0)
+            
+        return min(r for r in risks if r > 0) or 0
 
     def calculate_quantity(self, entry_price: float, stop_loss: float) -> int:
         risk_amount = self.capital * self.risk_per_trade_percent
@@ -144,19 +166,45 @@ class TrendMomentumStrategy:
                     # Update highest price for trailing SL
                     highest_price_since_entry = max(highest_price_since_entry, row['high'])
                     
-                    # Update Trailing SL (ATR based)
-                    trail_sl_atr = highest_price_since_entry - (row['atr'] * self.trail_multiplier)
+                    current_profit = row['close'] - active_trade.entry_price
+                    profit_r = current_profit / active_trade.initial_risk if active_trade.initial_risk > 0 else 0
                     
-                    # Tighten SL to previous candle low if in profit
-                    trail_sl_low = prev_row['low'] if row['close'] > active_trade.entry_price else 0
-                    
-                    trail_sl = max(trail_sl_atr, trail_sl_low)
-                    if trail_sl > active_trade.stop_loss:
-                        active_trade.stop_loss = trail_sl
+                    if self.trailing_enabled:
+                        new_sl = active_trade.stop_loss
+                        
+                        # 1. Step Trailing
+                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                            levels = self.trailing_config['step_trailing'].get('levels', [])
+                            for level in levels:
+                                if profit_r >= level['profit_r']:
+                                    locked_sl = active_trade.entry_price + (level['lock_r'] * active_trade.initial_risk)
+                                    if new_sl is None:
+                                        new_sl = locked_sl
+                                    else:
+                                        new_sl = max(new_sl, locked_sl)
+                        
+                        # 2. Tighten SL to previous candle low if in profit
+                        if row['close'] > active_trade.entry_price:
+                            if new_sl is None:
+                                new_sl = prev_row['low']
+                            else:
+                                new_sl = max(new_sl, prev_row['low'])
+                        
+                        # 3. ATR-based trailing (Universal Setup)
+                        activation_r = self.trailing_config.get('activation_r', 1.8)
+                        if profit_r >= activation_r:
+                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                            atr_trail = highest_price_since_entry - (row['atr'] * trail_multiplier)
+                            if new_sl is None:
+                                new_sl = atr_trail
+                            else:
+                                new_sl = max(new_sl, atr_trail)
+                        
+                        active_trade.stop_loss = new_sl
                     
                     # Check Exit Conditions
                     exit_reason = None
-                    if row['low'] <= active_trade.stop_loss:
+                    if active_trade.stop_loss is not None and row['low'] <= active_trade.stop_loss:
                         exit_reason = "SL/TSL Hit"
                         exit_price = active_trade.stop_loss
                     elif row['rsi'] < 40:
@@ -169,19 +217,45 @@ class TrendMomentumStrategy:
                     # Update lowest price for trailing SL
                     lowest_price_since_entry = min(lowest_price_since_entry, row['low'])
                     
-                    # Update Trailing SL (ATR based)
-                    trail_sl_atr = lowest_price_since_entry + (row['atr'] * self.trail_multiplier)
+                    current_profit = active_trade.entry_price - row['close']
+                    profit_r = current_profit / active_trade.initial_risk if active_trade.initial_risk > 0 else 0
                     
-                    # Tighten SL to previous candle high if in profit
-                    trail_sl_high = prev_row['high'] if row['close'] < active_trade.entry_price else float('inf')
-                    
-                    trail_sl = min(trail_sl_atr, trail_sl_high)
-                    if trail_sl < active_trade.stop_loss:
-                        active_trade.stop_loss = trail_sl
+                    if self.trailing_enabled:
+                        new_sl = active_trade.stop_loss
+                        
+                        # 1. Step Trailing
+                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                            levels = self.trailing_config['step_trailing'].get('levels', [])
+                            for level in levels:
+                                if profit_r >= level['profit_r']:
+                                    locked_sl = active_trade.entry_price - (level['lock_r'] * active_trade.initial_risk)
+                                    if new_sl is None:
+                                        new_sl = locked_sl
+                                    else:
+                                        new_sl = min(new_sl, locked_sl)
+                        
+                        # 2. Tighten SL to previous candle high if in profit
+                        if row['close'] < active_trade.entry_price:
+                            if new_sl is None:
+                                new_sl = prev_row['high']
+                            else:
+                                new_sl = min(new_sl, prev_row['high'])
+                        
+                        # 3. ATR-based trailing
+                        activation_r = self.trailing_config.get('activation_r', 1.8)
+                        if profit_r >= activation_r:
+                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                            atr_trail = lowest_price_since_entry + (row['atr'] * trail_multiplier)
+                            if new_sl is None:
+                                new_sl = atr_trail
+                            else:
+                                new_sl = min(new_sl, atr_trail)
+                        
+                        active_trade.stop_loss = new_sl
                     
                     # Check Exit Conditions
                     exit_reason = None
-                    if row['high'] >= active_trade.stop_loss:
+                    if active_trade.stop_loss is not None and row['high'] >= active_trade.stop_loss:
                         exit_reason = "SL/TSL Hit"
                         exit_price = active_trade.stop_loss
                     elif row['rsi'] > 60: # Bearish RSI reversal
@@ -263,8 +337,9 @@ class TrendMomentumStrategy:
                 
                 if trend_long_ok and rsi_long_ok and htf_long_ok and self.is_bullish_pattern(candles_window):
                     entry_price = row['close']
-                    initial_sl = entry_price - (row['atr'] * self.sl_multiplier)
-                    quantity = self.calculate_quantity(entry_price, initial_sl)
+                    initial_risk = self._get_initial_risk(row['atr'])
+                    initial_sl = (entry_price - initial_risk) if self.sl_enabled else None
+                    quantity = self.calculate_quantity(entry_price, initial_sl if initial_sl else entry_price - initial_risk)
                     
                     active_trade = Trade(
                         option_type='CALL',
@@ -275,15 +350,17 @@ class TrendMomentumStrategy:
                         quantity=quantity,
                         rsi=row['rsi'],
                         rsi_upper=last_upper['rsi'],
-                        stop_loss=initial_sl
+                        stop_loss=initial_sl,
+                        initial_risk=initial_risk
                     )
                     trades_today += 1
                     highest_price_since_entry = entry_price
                 
                 elif trend_short_ok and rsi_short_ok and htf_short_ok and self.is_bearish_pattern(candles_window):
                     entry_price = row['close']
-                    initial_sl = entry_price + (row['atr'] * self.sl_multiplier)
-                    quantity = self.calculate_quantity(entry_price, initial_sl)
+                    initial_risk = self._get_initial_risk(row['atr'])
+                    initial_sl = (entry_price + initial_risk) if self.sl_enabled else None
+                    quantity = self.calculate_quantity(entry_price, initial_sl if initial_sl else entry_price + initial_risk)
                     
                     active_trade = Trade(
                         option_type='PUT',
@@ -294,7 +371,8 @@ class TrendMomentumStrategy:
                         quantity=quantity,
                         rsi=row['rsi'],
                         rsi_upper=last_upper['rsi'],
-                        stop_loss=initial_sl
+                        stop_loss=initial_sl,
+                        initial_risk=initial_risk
                     )
                     trades_today += 1
                     lowest_price_since_entry = entry_price

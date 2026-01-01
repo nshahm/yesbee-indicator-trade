@@ -31,6 +31,24 @@ trading_hours:
 risk_management:
   max_trades_per_day: 10
   max_consecutive_losses_per_day: 2
+  stop_loss:
+    enabled: true
+    atr:
+      enabled: false
+      multiplier: 1.2
+    fixed:
+      enabled: true
+      points: 50
+  trailing:
+    enabled: false
+    activation_r: 1.5
+    multiplier: 1.0
+    step_trailing:
+      enabled: true
+      levels:
+        - { profit_r: 0.8, lock_r: 0.0 }
+        - { profit_r: 1.5, lock_r: 0.5 }
+        - { profit_r: 2.5, lock_r: 1.5 }
 
 indicators:
   rsi:

@@ -18,6 +18,7 @@ class Trade:
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
     stop_loss: Optional[float] = None
+    initial_risk: Optional[float] = None
     exit_time: Optional[str] = None
     exit_price: Optional[float] = None
 
@@ -211,8 +212,30 @@ class OptionStrategy:
         self.risk_management = options.get('risk_management', {})
         self.max_trades_per_day = self.risk_management.get('max_trades_per_day', 0)
         self.max_consecutive_losses_per_day = self.risk_management.get('max_consecutive_losses_per_day', 0)
+        self.sl_config = self.risk_management.get('stop_loss', {})
+        self.trailing_config = self.risk_management.get('trailing', {})
+        self.sl_enabled = self.sl_config.get('enabled', True)
+        self.atr_sl_config = self.sl_config.get('atr', {})
+        self.fixed_sl_config = self.sl_config.get('fixed', {})
+        self.trailing_enabled = self.trailing_config.get('enabled', True)
         
         self.patterns = self._get_enabled_patterns()
+        
+    def _get_initial_risk(self, current_atr: float) -> float:
+        risks = []
+        if self.atr_sl_config.get('enabled', True):
+            multiplier = self.atr_sl_config.get('multiplier', 1.5)
+            risks.append(multiplier * (current_atr if not pd.isna(current_atr) else 0))
+        
+        if self.fixed_sl_config.get('enabled', False):
+            risks.append(self.fixed_sl_config.get('points', 0))
+            
+        if not risks:
+            # Fallback to ATR if nothing is enabled but sl is enabled
+            return 1.5 * (current_atr if not pd.isna(current_atr) else 0)
+            
+        # Use the tighter stop (minimum risk) if both are enabled
+        return min(r for r in risks if r > 0) or 0
         
     def _get_enabled_patterns(self) -> Dict:
         def is_enabled(p_name, category):
@@ -229,6 +252,8 @@ class OptionStrategy:
         active_trades = {'CALL': None, 'PUT': None}
         completed_trades: List[Trade] = []
         last_exit_time: Optional[datetime] = None
+        highest_price_since_entry = {'CALL': 0.0, 'PUT': 0.0}
+        lowest_price_since_entry = {'CALL': 0.0, 'PUT': 0.0}
         
         # Risk Management Tracking
         trades_today = 0
@@ -306,21 +331,88 @@ class OptionStrategy:
                 is_exit_triggered = False
                 exit_price = current_row_lower['close']
 
-                if force_session_exit:
-                    is_exit_triggered = True
-                else:
-                    # Trailing Stop Loss: Move to previous candle's low/high once in profit
-                    if i > 2:
-                        prev_row = df_lower.iloc[i-2]
-                        if current_pos == 'CALL':
+                # Trailing Stop Loss Logic from stoploss.md
+                if self.trailing_enabled:
+                    if current_pos == 'CALL':
+                        highest_price_since_entry['CALL'] = max(highest_price_since_entry['CALL'], current_row_lower['high'])
+                        current_profit = current_row_lower['close'] - trade.entry_price
+                        profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
+                        
+                        new_sl = trade.stop_loss
+                        
+                        # 1. Step Trailing
+                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                            levels = self.trailing_config['step_trailing'].get('levels', [])
+                            for level in levels:
+                                if profit_r >= level['profit_r']:
+                                    locked_sl = trade.entry_price + (level['lock_r'] * trade.initial_risk)
+                                    if new_sl is None:
+                                        new_sl = locked_sl
+                                    else:
+                                        new_sl = max(new_sl, locked_sl)
+                        
+                        # 2. Candle-based trailing (Original requirement)
+                        if i > 2:
+                            prev_row = df_lower.iloc[i-2]
                             if current_row_lower['close'] > trade.entry_price:
-                                if prev_row['low'] > trade.stop_loss:
-                                    trade.stop_loss = prev_row['low']
-                        else: # PUT
-                            if current_row_lower['close'] < trade.entry_price:
-                                if prev_row['high'] < trade.stop_loss:
-                                    trade.stop_loss = prev_row['high']
+                                if new_sl is None:
+                                    new_sl = prev_row['low']
+                                else:
+                                    new_sl = max(new_sl, prev_row['low'])
+                        
+                        # 3. ATR-based trailing (Universal Setup)
+                        activation_r = self.trailing_config.get('activation_r', 1.8)
+                        if profit_r >= activation_r:
+                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                            atr_trail = highest_price_since_entry['CALL'] - (current_atr * trail_multiplier)
+                            if new_sl is None:
+                                new_sl = atr_trail
+                            else:
+                                new_sl = max(new_sl, atr_trail)
+                        
+                        trade.stop_loss = new_sl
 
+                    else: # PUT
+                        lowest_price_since_entry['PUT'] = min(lowest_price_since_entry['PUT'], current_row_lower['low'])
+                        current_profit = trade.entry_price - current_row_lower['close']
+                        profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
+                        
+                        new_sl = trade.stop_loss
+                        
+                        # 1. Step Trailing
+                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                            levels = self.trailing_config['step_trailing'].get('levels', [])
+                            for level in levels:
+                                if profit_r >= level['profit_r']:
+                                    locked_sl = trade.entry_price - (level['lock_r'] * trade.initial_risk)
+                                    if new_sl is None:
+                                        new_sl = locked_sl
+                                    else:
+                                        new_sl = min(new_sl, locked_sl)
+                        
+                        # 2. Candle-based trailing
+                        if i > 2:
+                            prev_row = df_lower.iloc[i-2]
+                            if current_row_lower['close'] < trade.entry_price:
+                                if new_sl is None:
+                                    new_sl = prev_row['high']
+                                else:
+                                    new_sl = min(new_sl, prev_row['high'])
+                                
+                        # 3. ATR-based trailing
+                        activation_r = self.trailing_config.get('activation_r', 1.8)
+                        if profit_r >= activation_r:
+                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                            atr_trail = lowest_price_since_entry['PUT'] + (current_atr * trail_multiplier)
+                            if new_sl is None:
+                                new_sl = atr_trail
+                            else:
+                                new_sl = min(new_sl, atr_trail)
+                        
+                        trade.stop_loss = new_sl
+
+                # Check Stop Loss (Prioritized over session exit)
+                if trade.stop_loss is not None:
                     if current_pos == 'CALL':
                         if current_row_lower['low'] <= trade.stop_loss:
                             is_exit_triggered = True
@@ -329,6 +421,11 @@ class OptionStrategy:
                         if current_row_lower['high'] >= trade.stop_loss:
                             is_exit_triggered = True
                             exit_price = trade.stop_loss
+
+                # Force Session Exit (if SL not hit)
+                if not is_exit_triggered and force_session_exit:
+                    is_exit_triggered = True
+                    exit_price = current_row_lower['close']
                 
                 if is_exit_triggered:
                     trade.exit_time = current_row_lower['date'].isoformat()
@@ -469,13 +566,14 @@ class OptionStrategy:
                     
                     # 1. Entry based on RSI Trend
                     if current_pos is None and rsi_trend_signal:
-                        multiplier = self.atr_config.get('multiplier', 1.5)
-                        atr_value = current_atr if not pd.isna(current_atr) else 0
+                        initial_risk = self._get_initial_risk(current_atr)
                         
                         if rsi_trend_signal == 'CALL':
-                            sl_price = current_row_lower['close'] - (multiplier * atr_value)
+                            sl_price = current_row_lower['close'] - initial_risk if self.sl_enabled else None
+                            highest_price_since_entry['CALL'] = current_row_lower['high']
                         else:
-                            sl_price = current_row_lower['close'] + (multiplier * atr_value)
+                            sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
+                            lowest_price_since_entry['PUT'] = current_row_lower['low']
                             
                         active_trades[rsi_trend_signal] = Trade(
                             option_type=rsi_trend_signal,
@@ -485,7 +583,8 @@ class OptionStrategy:
                             entry_price=current_row_lower['close'],
                             rsi=current_rsi,
                             rsi_upper=current_rsi_upper,
-                            stop_loss=sl_price
+                            stop_loss=sl_price,
+                            initial_risk=initial_risk
                         )
                         trades_today += 1
                         current_pos = rsi_trend_signal
@@ -510,13 +609,14 @@ class OptionStrategy:
                                     for signal in signals:
                                         if signal.action == 'ENTRY':
                                             if active_trades[signal.option_type] is None:
-                                                multiplier = self.atr_config.get('multiplier', 1.5)
-                                                atr_value = current_atr if not pd.isna(current_atr) else 0
+                                                initial_risk = self._get_initial_risk(current_atr)
                                                 
                                                 if signal.option_type == 'CALL':
-                                                    sl_price = current_row_lower['close'] - (multiplier * atr_value)
+                                                    sl_price = current_row_lower['close'] - initial_risk if self.sl_enabled else None
+                                                    highest_price_since_entry['CALL'] = current_row_lower['high']
                                                 else:
-                                                    sl_price = current_row_lower['close'] + (multiplier * atr_value)
+                                                    sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
+                                                    lowest_price_since_entry['PUT'] = current_row_lower['low']
 
                                                 active_trades[signal.option_type] = Trade(
                                                     option_type=signal.option_type,
@@ -526,7 +626,8 @@ class OptionStrategy:
                                                     entry_price=current_row_lower['close'],
                                                     rsi=current_rsi,
                                                     rsi_upper=current_rsi_upper,
-                                                    stop_loss=sl_price
+                                                    stop_loss=sl_price,
+                                                    initial_risk=initial_risk
                                                 )
                                                 trades_today += 1
                                                 current_pos = signal.option_type
