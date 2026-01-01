@@ -62,6 +62,10 @@ def calculate_stochastic(df: pd.DataFrame, k: int = 14, d: int = 3, smooth_k: in
     stoch_df = df.ta.stoch(high=df['high'], low=df['low'], close=df['close'], k=k, d=d, smooth_k=smooth_k)
     return stoch_df
 
+def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    adx = df.ta.adx(high=df['high'], low=df['low'], close=df['close'], length=period)
+    return adx
+
 def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: str, upper_interval: str):
     console = Console()
     table = Table(title=f"📈 Trade Summary: {symbol} ({lower_interval}/{upper_interval})")
@@ -248,6 +252,16 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     # Calculate ATR for stop loss
     atr_period = options.get('indicators', {}).get('atr', {}).get('period', 14)
     df_lower['atr'] = calculate_atr(df_lower, period=atr_period)
+
+    # Calculate ADX for trend strength filtering
+    adx_period = options.get('indicators', {}).get('adx', {}).get('period', 14)
+    adx_df = calculate_adx(df_lower, period=adx_period)
+    if adx_df is not None:
+        # Rename ADX columns to standard names
+        adx_col = f"ADX_{adx_period}"
+        if adx_col in adx_df.columns:
+            adx_df = adx_df.rename(columns={adx_col: "ADX"})
+        df_lower = pd.concat([df_lower, adx_df], axis=1)
     
     with print_lock:
         console.print(f"Total lower candles (before filtering): {len(df_lower)}")

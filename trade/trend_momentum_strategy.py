@@ -61,6 +61,10 @@ class TrendMomentumStrategy:
         self.rsi_upper_put_threshold = rsi_config.get('upper_put_threshold', 55)
         self.rsi_upper_put_min = rsi_config.get('upper_put_min', 30)
         
+        adx_config = indicator_config.get('adx', {})
+        self.adx_enabled = adx_config.get('enabled', True)
+        self.adx_threshold = adx_config.get('threshold', 18)
+        
         # Multipliers from system.md
         atr_config = indicator_config.get('atr', {})
         if self.trading_style == 'intraday':
@@ -305,10 +309,14 @@ class TrendMomentumStrategy:
                 ema200_upper = last_upper.get('ema200', 0)
                 
                 # 1. LONG Entry Conditions
+                adx_value = row.get('ADX', 0)
+                adx_ok = adx_value > self.adx_threshold if self.adx_enabled else True
+                
                 trend_long_ok = (
                     row['close'] > row['ema50'] and 
                     row['ema20'] > row['ema50'] and 
-                    (np.isnan(ema200_lower) or row['close'] > ema200_lower)
+                    (np.isnan(ema200_lower) or row['close'] > ema200_lower) and
+                    adx_ok
                 )
                 rsi_long_ok = (
                     self.rsi_call_threshold < row['rsi'] < self.rsi_call_upper_threshold and 
@@ -324,7 +332,8 @@ class TrendMomentumStrategy:
                 trend_short_ok = (
                     row['close'] < row['ema50'] and 
                     row['ema20'] < row['ema50'] and 
-                    (np.isnan(ema200_lower) or row['close'] < ema200_lower)
+                    (np.isnan(ema200_lower) or row['close'] < ema200_lower) and
+                    adx_ok
                 )
                 rsi_short_ok = (
                     self.rsi_put_lower_threshold < row['rsi'] < self.rsi_put_threshold and 

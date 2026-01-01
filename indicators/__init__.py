@@ -5,6 +5,7 @@ from .supertrend import calculate_supertrend, get_current_supertrend
 from .market_structure import detect_swings, MarketStructure
 from .macd import calculate_macd, get_current_macd
 from .stochastic import calculate_stochastic, get_current_stochastic
+from .adx import calculate_adx, get_current_adx
 
 __all__ = [
     'calculate_rsi', 'get_current_rsi', 'check_rsi_signal',
@@ -13,5 +14,6 @@ __all__ = [
     'calculate_supertrend', 'get_current_supertrend',
     'detect_swings', 'MarketStructure',
     'calculate_macd', 'get_current_macd',
-    'calculate_stochastic', 'get_current_stochastic'
+    'calculate_stochastic', 'get_current_stochastic',
+    'calculate_adx', 'get_current_adx'
 ]

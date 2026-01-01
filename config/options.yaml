@@ -1,6 +1,6 @@
 indices:
   nifty50:
-    enabled: true
+    enabled: false
     symbol: "NIFTY50"
     description: "Nifty 50 Index"
     max_concurrent_trades: 1
@@ -32,7 +32,7 @@ indices:
             - { profit_r: 2.5, lock_r: 1.5 }
 
   banknifty:
-    enabled: false
+    enabled: true
     symbol: "BANKNIFTY"
     description: "Bank Nifty Index"
     max_concurrent_trades: 1
@@ -43,7 +43,7 @@ indices:
       # upper: "15minute"
     risk_management:
       max_trades_per_day: 10
-      max_consecutive_losses_per_day: 3
+      max_consecutive_losses_per_day: 4
       stop_loss:
         enabled: true
         atr:
@@ -129,6 +129,10 @@ indicators:
     smooth_k: 3
     oversold: 20
     overbought: 80
+  adx:
+    enabled: true
+    period: 14
+    threshold: 25
 
 patterns:
   bullish:
