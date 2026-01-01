@@ -1,6 +1,6 @@
 indices:
   nifty50:
-    enabled: false
+    enabled: true
     symbol: "NIFTY50"
     description: "Nifty 50 Index"
     max_concurrent_trades: 1
@@ -146,7 +146,7 @@ indicators:
   adx:
     enabled: true
     period: 14
-    threshold: 18
+    threshold: 21
 
 patterns:
   bullish:

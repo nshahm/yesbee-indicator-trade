@@ -116,6 +116,7 @@ def get_option_signals(
     rsi_upper: Optional[float] = None,
     adx_value: Optional[float] = None,
     rsi_config: Optional[Dict] = None,
+    adx_config: Optional[Dict] = None,
     df: Optional[pd.DataFrame] = None,
     index: Optional[int] = None
 ) -> List[OptionSignal]:
@@ -136,10 +137,15 @@ def get_option_signals(
     
     # 1. ENTRY LOGIC (Only if no active position)
     if current_position is None:
-        # Check RSI thresholds
+        # Check RSI and ADX thresholds
         rsi_call_ok = True
         rsi_put_ok = True
+        adx_ok = True
         
+        if adx_config and adx_config.get('enabled', True):
+            adx_thresh = adx_config.get('threshold', 18)
+            adx_ok = adx_value > adx_thresh if adx_value is not None else False
+
         if rsi_config:
             call_thresh = rsi_config.get('call_threshold')
             call_upper_thresh = rsi_config.get('call_upper_threshold')
@@ -169,10 +175,10 @@ def get_option_signals(
         # STRICT MTF: Only enter if upper timeframe confirms trend
         if upper_category:
             if category == 'Bullish' and upper_category == 'Bullish':
-                if rsi_call_ok:
+                if rsi_call_ok and adx_ok:
                     signals.append(OptionSignal('ENTRY', 'CALL', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
             elif category == 'Bearish' and upper_category == 'Bearish':
-                if rsi_put_ok:
+                if rsi_put_ok and adx_ok:
                     signals.append(OptionSignal('ENTRY', 'PUT', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
         # No entry if upper_category is not available (Strict MTF)
             
@@ -211,6 +217,9 @@ class OptionStrategy:
         self.options = options
         self.symbol = symbol
         self.rsi_config = options.get('indicators', {}).get('rsi', {})
+        self.adx_config = options.get('indicators', {}).get('adx', {})
+        self.adx_enabled = self.adx_config.get('enabled', True)
+        self.adx_threshold = self.adx_config.get('threshold', 18)
         self.atr_config = options.get('indicators', {}).get('atr', {})
         self.macd_config = options.get('indicators', {}).get('macd', {})
         self.stoch_config = options.get('indicators', {}).get('stochastic', {})
@@ -553,6 +562,7 @@ class OptionStrategy:
                                 rsi_upper=current_rsi_upper,
                                 adx_value=current_adx,
                                 rsi_config=self.rsi_config,
+                                adx_config=self.adx_config,
                                 df=df_lower,
                                 index=i-1
                             )
@@ -590,7 +600,8 @@ class OptionStrategy:
                         rsi_value=current_rsi,
                         rsi_upper=current_rsi_upper,
                         adx_value=current_adx,
-                        rsi_config=self.rsi_config
+                        rsi_config=self.rsi_config,
+                        adx_config=self.adx_config
                     )
                     for signal in utf_exit_signals:
                         if signal.action == 'EXIT':
@@ -631,8 +642,13 @@ class OptionStrategy:
                 if current_active_count < self.max_concurrent_trades:
                     current_pos = 'CALL' if active_trades['CALL'] else 'PUT' if active_trades['PUT'] else None
                     
+                    # ADX Trend Strength Filter
+                    adx_ok = True
+                    if self.adx_enabled:
+                        adx_ok = current_adx > self.adx_threshold if current_adx is not None else False
+
                     # 1. Entry based on RSI Trend
-                    if current_pos is None and rsi_trend_signal:
+                    if current_pos is None and rsi_trend_signal and adx_ok:
                         initial_risk = self._get_initial_risk(current_atr)
                         
                         if rsi_trend_signal == 'CALL':
@@ -659,7 +675,7 @@ class OptionStrategy:
                         current_active_count += 1
 
                     # 2. Entry based on Double Cross
-                    if current_active_count < self.max_concurrent_trades and double_cross_signal:
+                    if current_active_count < self.max_concurrent_trades and double_cross_signal and adx_ok:
                         if active_trades[double_cross_signal] is None:
                             initial_risk = self._get_initial_risk(current_atr)
                             
@@ -687,7 +703,7 @@ class OptionStrategy:
                             current_active_count += 1
 
                     # 3. Pattern entry logic (only if not already entered by RSI or Double Cross)
-                    if current_active_count < self.max_concurrent_trades:
+                    if current_active_count < self.max_concurrent_trades and adx_ok:
                         for category_lower, pats in self.patterns.items():
                             for pattern_func in pats:
                                 if pattern_func(candles_lower):
@@ -700,7 +716,8 @@ class OptionStrategy:
                                         rsi_value=current_rsi,
                                         rsi_upper=current_rsi_upper,
                                         adx_value=current_adx,
-                                        rsi_config=self.rsi_config
+                                        rsi_config=self.rsi_config,
+                                        adx_config=self.adx_config
                                     )
                                     
                                     for signal in signals:
