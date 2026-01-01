@@ -1,13 +1,15 @@
 backtest:
   # Date range format: "YYYYMMDDHHmm_YYYYMMDDHHmm"
   # date_range: "202501010915_202512311530"
-  # date_range: "202512250915_202512311530"
+  date_range: "202512300915_202512311530"
   # date_range: "202512010915_202512311530"
-  date_range: "202511010915_202511301530"
+  # date_range: "202511010915_202511301530"
   
   # MTF Intervals
   lower_interval: "15minute"
   upper_interval: "60minute"
+  # lower_interval: "5minute"
+  # upper_interval: "15minute"
   
   # Data source: "kite_api" to fetch from Kite API, "local_files" to use pre-downloaded files
   data_source: "kite_api"

@@ -14,8 +14,8 @@ BACKTEST_YAML="config/backtest.yaml"
 OPTIONS_YAML="config/options.yaml"
 
 # Default values from YAML
-# We'll pick the first enabled index from options.yaml or default to nifty50
-SYMBOL="nifty50"
+# If SYMBOL is empty, run_backtest.py will run for all enabled indices in options.yaml
+SYMBOL=""
 # Get date range from backtest.yaml
 DATE_RANGE=$(parse_yaml "$BACKTEST_YAML" "date_range")
 FROM_DATE=""
@@ -51,7 +51,7 @@ done
 
 echo "--------------------------------------------------"
 echo "🚀 Starting Backtest Workflow"
-echo "Symbol:   $SYMBOL"
+echo "Symbol:   ${SYMBOL:-All enabled indices}"
 echo "Range:    $FROM_DATE to $TO_DATE"
 echo "--------------------------------------------------"
 
@@ -59,7 +59,10 @@ echo "--------------------------------------------------"
 echo "Running candlestick pattern backtest..."
 
 # Build backtest arguments
-BACKTEST_ARGS=("--symbol" "$SYMBOL")
+BACKTEST_ARGS=()
+if [ -n "$SYMBOL" ]; then
+    BACKTEST_ARGS+=("--symbol" "$SYMBOL")
+fi
 if [ -n "$FROM_DATE" ]; then
     # run_backtest.py expects YYYYMMDD for from-date/to-date
     BACKTEST_ARGS+=("--from-date" "${FROM_DATE:0:8}")

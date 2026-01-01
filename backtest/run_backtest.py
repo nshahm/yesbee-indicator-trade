@@ -38,10 +38,16 @@ def load_data(file_path: Path) -> pd.DataFrame:
     return df
 
 def calculate_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    return df.ta.rsi(length=period)
+    rsi = df.ta.rsi(length=period)
+    if isinstance(rsi, pd.DataFrame):
+        return rsi.iloc[:, 0]
+    return rsi
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    return df.ta.atr(high=df['high'], low=df['low'], close=df['close'], length=period)
+    atr = df.ta.atr(high=df['high'], low=df['low'], close=df['close'], length=period)
+    if isinstance(atr, pd.DataFrame):
+        return atr.iloc[:, 0]
+    return atr
 
 def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: str, upper_interval: str):
     console = Console()
@@ -189,101 +195,114 @@ def main():
     options = load_config(Path(args.options))
     backtest_config = config.get('backtest', {})
     
-    symbol = args.symbol or 'nifty50'
+    indices_config = options.get('indices', {})
     
-    # Priority: Command line > backtest.yaml > options.yaml indices > default
-    backtest_lower = backtest_config.get('lower_interval')
-    backtest_upper = backtest_config.get('upper_interval')
+    if args.symbol:
+        symbol_key = args.symbol.lower()
+        if symbol_key not in indices_config or not indices_config[symbol_key].get('enabled', False):
+            print(f"Symbol {args.symbol} is not enabled in config. Skipping.")
+            return
+        symbols_to_run = [args.symbol]
+    else:
+        symbols_to_run = [s for s, cfg in indices_config.items() if cfg.get('enabled', False)]
+        if not symbols_to_run:
+            print("No enabled indices found in config.")
+            return
     
-    # Get intervals from options.yaml indices
-    index_options = options.get('indices', {}).get(symbol.lower(), {})
-    timeframes = index_options.get('timeframes', {})
-    
-    lower_interval = args.lower_interval or backtest_lower or timeframes.get('lower', '5minute')
-    upper_interval = args.upper_interval or backtest_upper or timeframes.get('upper', '15minute')
-    
-    date_range = backtest_config.get('date_range', '')
-    from_date = args.from_date
-    to_date = args.to_date
-    
-    if not from_date and '_' in date_range:
-        from_date = date_range.split('_')[0][:8]
-    if not to_date and '_' in date_range:
-        to_date = date_range.split('_')[1][:8]
-    
-    data_dir = Path(backtest_config.get('cache_dir', 'history_data'))
-    
-    def get_df(interval):
-        pattern = f"{symbol.lower()}_*_{interval}_*"
-        files = list(data_dir.glob(f"{pattern}.json"))
-        if not files:
-            return pd.DataFrame()
+    for symbol in symbols_to_run:
+        # Priority: Command line > backtest.yaml > options.yaml indices > default
+        backtest_lower = backtest_config.get('lower_interval')
+        backtest_upper = backtest_config.get('upper_interval')
         
-        file_path = files[0]
-        if from_date or to_date:
-            for f in files:
-                parts = f.stem.split('_')
-                if len(parts) >= 5:
-                    file_from = parts[-2][:8]
-                    file_to = parts[-1][:8]
-                    if (not from_date or file_to >= from_date) and (not to_date or file_from <= to_date):
-                        file_path = f
-                        break
+        # Get intervals from options.yaml indices
+        index_options = indices_config.get(symbol.lower(), {})
+        timeframes = index_options.get('timeframes', {})
         
-        print(f"Using {interval} data from: {file_path}")
-        df = load_data(file_path)
-        return df
-
-    df_lower = get_df(lower_interval)
-    df_upper = get_df(upper_interval)
-    
-    if df_lower.empty or df_upper.empty:
-        print(f"Missing data locally for {symbol}. Attempting to download...")
+        lower_interval = args.lower_interval or backtest_lower or timeframes.get('lower', '5minute')
+        upper_interval = args.upper_interval or backtest_upper or timeframes.get('upper', '15minute')
         
-        # Determine date range for download
-        # Use full range from config if possible, otherwise use args
-        full_date_range = backtest_config.get('date_range', '')
-        if '_' in full_date_range:
-            from_full, to_full = full_date_range.split('_')
-        else:
-            from_full = f"{from_date}0915" if from_date else "202501010915"
-            to_full = f"{to_date}1530" if to_date else datetime.now().strftime('%Y%m%d%H%M')
+        date_range = backtest_config.get('date_range', '')
+        from_date = args.from_date
+        to_date = args.to_date
+        
+        if not from_date and '_' in date_range:
+            from_date = date_range.split('_')[0][:8]
+        if not to_date and '_' in date_range:
+            to_date = date_range.split('_')[1][:8]
+        
+        data_dir = Path(backtest_config.get('cache_dir', 'history_data'))
+        
+        def get_df(interval):
+            pattern = f"{symbol.lower()}_*_{interval}_*"
+            files = list(data_dir.glob(f"{pattern}.json"))
+            if not files:
+                return pd.DataFrame()
             
-        downloader = BacktestDataDownloader(
-            backtest_config_path=args.config,
-            options_config_path=args.options
-        )
-        
-        indices = {symbol.upper(): ''}
-        timeframes_to_download = []
-        if df_lower.empty: timeframes_to_download.append(lower_interval)
-        if df_upper.empty: timeframes_to_download.append(upper_interval)
-        
-        try:
-            f_dt = datetime.strptime(from_full, '%Y%m%d%H%M')
-            t_dt = datetime.strptime(to_full, '%Y%m%d%H%M')
-            # Handle inverted range if any
-            if t_dt < f_dt:
-                f_dt, t_dt = t_dt, f_dt
-        except:
-            f_dt, t_dt = downloader.get_date_range()
+            file_path = files[0]
+            if from_date or to_date:
+                for f in files:
+                    parts = f.stem.split('_')
+                    if len(parts) >= 5:
+                        file_from = parts[-2][:8]
+                        file_to = parts[-1][:8]
+                        if (not from_date or file_to >= from_date) and (not to_date or file_from <= to_date):
+                            file_path = f
+                            break
             
-        downloader.download_index_data(
-            indices=indices,
-            timeframes=timeframes_to_download,
-            from_date=f_dt,
-            to_date=t_dt
-        )
+            print(f"Using {interval} data from: {file_path}")
+            df = load_data(file_path)
+            return df
+
+        df_lower = get_df(lower_interval)
+        df_upper = get_df(upper_interval)
         
-        # Retry loading
-        if df_lower.empty: df_lower = get_df(lower_interval)
-        if df_upper.empty: df_upper = get_df(upper_interval)
+        if df_lower.empty or df_upper.empty:
+            print(f"Missing data locally for {symbol}. Attempting to download...")
+            
+            # Determine date range for download
+            # Use full range from config if possible, otherwise use args
+            full_date_range = backtest_config.get('date_range', '')
+            if '_' in full_date_range:
+                from_full, to_full = full_date_range.split('_')
+            else:
+                from_full = f"{from_date}0915" if from_date else "202501010915"
+                to_full = f"{to_date}1530" if to_date else datetime.now().strftime('%Y%m%d%H%M')
+                
+            downloader = BacktestDataDownloader(
+                backtest_config_path=args.config,
+                options_config_path=args.options
+            )
+            
+            indices = {symbol.upper(): ''}
+            timeframes_to_download = []
+            if df_lower.empty: timeframes_to_download.append(lower_interval)
+            if df_upper.empty: timeframes_to_download.append(upper_interval)
+            
+            try:
+                f_dt = datetime.strptime(from_full, '%Y%m%d%H%M')
+                t_dt = datetime.strptime(to_full, '%Y%m%d%H%M')
+                # Handle inverted range if any
+                if t_dt < f_dt:
+                    f_dt, t_dt = t_dt, f_dt
+            except:
+                f_dt, t_dt = downloader.get_date_range()
+                
+            downloader.download_index_data(
+                indices=indices,
+                timeframes=timeframes_to_download,
+                from_date=f_dt,
+                to_date=t_dt
+            )
+            
+            # Retry loading
+            if df_lower.empty: df_lower = get_df(lower_interval)
+            if df_upper.empty: df_upper = get_df(upper_interval)
 
-    if df_lower.empty or df_upper.empty:
-        print(f"Unable to resolve missing data for ({lower_interval}, {upper_interval})")
-        return
+        if df_lower.empty or df_upper.empty:
+            print(f"Unable to resolve missing data for {symbol} ({lower_interval}, {upper_interval})")
+            continue
 
-    run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
+        run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
 
 if __name__ == "__main__":
     main()

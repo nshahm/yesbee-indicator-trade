@@ -7,22 +7,25 @@ indices:
     timeframes:
       lower: "15minute"
       upper: "60minute"
+      # lower: "5minute"
+      # upper: "15minute"
+
   banknifty:
-    enabled: false
+    enabled: true
     symbol: "BANKNIFTY"
     description: "Bank Nifty Index"
     max_concurrent_trades: 1
     timeframes:
-      lower: "5minute"
-      upper: "15minute"
+      lower: "15minute"
+      upper: "60minute"
   finnifty:
-    enabled: false
+    enabled: true
     symbol: "FINNIFTY"
     description: "Nifty Financial Services"
     max_concurrent_trades: 1
     timeframes:
-      lower: "5minute"
-      upper: "15minute"
+      lower: "15minute"
+      upper: "60minute"
 
 trading_hours:
   start_time: "09:30"
@@ -38,7 +41,7 @@ risk_management:
       multiplier: 1.2
     fixed:
       enabled: true
-      points: 30
+      points: 45
   trailing:
     enabled: false
     activation_r: 1.5
