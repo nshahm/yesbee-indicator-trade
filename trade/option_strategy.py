@@ -309,6 +309,18 @@ class OptionStrategy:
                 if force_session_exit:
                     is_exit_triggered = True
                 else:
+                    # Trailing Stop Loss: Move to previous candle's low/high once in profit
+                    if i > 2:
+                        prev_row = df_lower.iloc[i-2]
+                        if current_pos == 'CALL':
+                            if current_row_lower['close'] > trade.entry_price:
+                                if prev_row['low'] > trade.stop_loss:
+                                    trade.stop_loss = prev_row['low']
+                        else: # PUT
+                            if current_row_lower['close'] < trade.entry_price:
+                                if prev_row['high'] < trade.stop_loss:
+                                    trade.stop_loss = prev_row['high']
+
                     if current_pos == 'CALL':
                         if current_row_lower['low'] <= trade.stop_loss:
                             is_exit_triggered = True

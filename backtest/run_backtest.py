@@ -3,6 +3,7 @@ import argparse
 import sys
 import yaml
 import pandas as pd
+import numpy as np
 import pandas_ta as ta
 from pathlib import Path
 from datetime import datetime
@@ -131,11 +132,17 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
         def df_to_candles(df):
             return [Candle(date=r['date'].isoformat(), open=r['open'], high=r['high'], low=r['low'], close=r['close']) for _, r in df.iterrows()]
         
-        df_lower['ema20'] = calculate_ema(df_to_candles(df_lower), 20)
-        df_lower['ema50'] = calculate_ema(df_to_candles(df_lower), 50)
-        df_lower['ema200'] = calculate_ema(df_to_candles(df_lower), 200)
-        df_upper['ema50'] = calculate_ema(df_to_candles(df_upper), 50)
-        df_upper['ema200'] = calculate_ema(df_to_candles(df_upper), 200)
+        def get_ema_series(df, period):
+            s = calculate_ema(df_to_candles(df), period)
+            if s is None or s.empty:
+                return pd.Series([np.nan] * len(df), index=df.index)
+            return s
+        
+        df_lower['ema20'] = get_ema_series(df_lower, 20)
+        df_lower['ema50'] = get_ema_series(df_lower, 50)
+        df_lower['ema200'] = get_ema_series(df_lower, 200)
+        df_upper['ema50'] = get_ema_series(df_upper, 50)
+        df_upper['ema200'] = get_ema_series(df_upper, 200)
 
     # Calculate ATR for stop loss
     atr_period = options.get('indicators', {}).get('atr', {}).get('period', 14)

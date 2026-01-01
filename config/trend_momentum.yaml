@@ -15,7 +15,13 @@ indicators:
   rsi:
     period: 14
     call_threshold: 60
+    call_upper_threshold: 75
     put_threshold: 50
+    put_lower_threshold: 35
+    upper_call_threshold: 50
+    upper_call_max: 75
+    upper_put_threshold: 55
+    upper_put_min: 30
   atr:
     period: 14
     sl_multiplier: 1.5
@@ -24,5 +30,5 @@ indicators:
 indices:
   nifty50:
     timeframes:
-      lower: "5minute"
-      upper: "15minute"
+      lower: "15minute"
+      upper: "60minute"

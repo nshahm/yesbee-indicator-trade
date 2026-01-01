@@ -6,7 +6,7 @@ indices:
     max_concurrent_trades: 1
     timeframes:
       lower: "15minute"
-      upper: "1hour"
+      upper: "60minute"
   banknifty:
     enabled: false
     symbol: "BANKNIFTY"
@@ -34,16 +34,23 @@ risk_management:
 
 indicators:
   rsi:
-    call_threshold: 55  # RSI > 55
-    call_upper_threshold: 80
-    put_threshold: 45   # RSI < 45
-    put_lower_threshold: 20
+    call_threshold: 60
+    call_upper_threshold: 75
+    put_threshold: 50
+    put_lower_threshold: 35
+    upper_call_threshold: 50
+    upper_call_max: 75
+    upper_put_threshold: 55
+    upper_put_min: 30
+    put_lower_threshold_old: 20
     neutral_threshold: 50
     exit:
       reversal_number: 5
   atr:
     period: 14
     multiplier: 1.5
+    sl_multiplier: 1.5
+    trail_multiplier: 1.2
 
 patterns:
   bullish:

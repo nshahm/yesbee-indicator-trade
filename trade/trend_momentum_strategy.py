@@ -41,15 +41,23 @@ class TrendMomentumStrategy:
         indicator_config = options.get('indicators', {})
         rsi_config = indicator_config.get('rsi', {})
         self.rsi_call_threshold = rsi_config.get('call_threshold', 50)
+        self.rsi_call_upper_threshold = rsi_config.get('call_upper_threshold', 75)
         self.rsi_put_threshold = rsi_config.get('put_threshold', 50)
+        self.rsi_put_lower_threshold = rsi_config.get('put_lower_threshold', 35)
+        
+        self.rsi_upper_call_threshold = rsi_config.get('upper_call_threshold', 50)
+        self.rsi_upper_call_max = rsi_config.get('upper_call_max', 75)
+        self.rsi_upper_put_threshold = rsi_config.get('upper_put_threshold', 55)
+        self.rsi_upper_put_min = rsi_config.get('upper_put_min', 30)
         
         # Multipliers from system.md
+        atr_config = indicator_config.get('atr', {})
         if self.trading_style == 'intraday':
-            self.sl_multiplier = 1.2
-            self.trail_multiplier = 1.0
+            self.sl_multiplier = atr_config.get('sl_multiplier', 1.5)
+            self.trail_multiplier = atr_config.get('trail_multiplier', 1.2)
         else: # swing
-            self.sl_multiplier = 2.0 # 1.5 - 2.0 as per system.md
-            self.trail_multiplier = 1.5 # 1.0 - 1.5 as per system.md
+            self.sl_multiplier = atr_config.get('sl_multiplier', 2.0)
+            self.trail_multiplier = atr_config.get('trail_multiplier', 1.5)
 
     def calculate_quantity(self, entry_price: float, stop_loss: float) -> int:
         risk_amount = self.capital * self.risk_per_trade_percent
@@ -136,8 +144,13 @@ class TrendMomentumStrategy:
                     # Update highest price for trailing SL
                     highest_price_since_entry = max(highest_price_since_entry, row['high'])
                     
-                    # Update Trailing SL
-                    trail_sl = highest_price_since_entry - (row['atr'] * self.trail_multiplier)
+                    # Update Trailing SL (ATR based)
+                    trail_sl_atr = highest_price_since_entry - (row['atr'] * self.trail_multiplier)
+                    
+                    # Tighten SL to previous candle low if in profit
+                    trail_sl_low = prev_row['low'] if row['close'] > active_trade.entry_price else 0
+                    
+                    trail_sl = max(trail_sl_atr, trail_sl_low)
                     if trail_sl > active_trade.stop_loss:
                         active_trade.stop_loss = trail_sl
                     
@@ -156,8 +169,13 @@ class TrendMomentumStrategy:
                     # Update lowest price for trailing SL
                     lowest_price_since_entry = min(lowest_price_since_entry, row['low'])
                     
-                    # Update Trailing SL
-                    trail_sl = lowest_price_since_entry + (row['atr'] * self.trail_multiplier)
+                    # Update Trailing SL (ATR based)
+                    trail_sl_atr = lowest_price_since_entry + (row['atr'] * self.trail_multiplier)
+                    
+                    # Tighten SL to previous candle high if in profit
+                    trail_sl_high = prev_row['high'] if row['close'] < active_trade.entry_price else float('inf')
+                    
+                    trail_sl = min(trail_sl_atr, trail_sl_high)
                     if trail_sl < active_trade.stop_loss:
                         active_trade.stop_loss = trail_sl
                     
@@ -206,28 +224,39 @@ class TrendMomentumStrategy:
 
                 # Check Entry Conditions
                 
+                ema200_lower = row.get('ema200', 0)
+                ema200_upper = last_upper.get('ema200', 0)
+                
                 # 1. LONG Entry Conditions
                 trend_long_ok = (
                     row['close'] > row['ema50'] and 
                     row['ema20'] > row['ema50'] and 
-                    row['close'] > row.get('ema200', 0)
+                    (np.isnan(ema200_lower) or row['close'] > ema200_lower)
                 )
-                rsi_long_ok = row['rsi'] > self.rsi_call_threshold and row['rsi'] > prev_row['rsi']
+                rsi_long_ok = (
+                    self.rsi_call_threshold < row['rsi'] < self.rsi_call_upper_threshold and 
+                    row['rsi'] > prev_row['rsi']
+                )
                 htf_long_ok = (
                     last_upper['close'] > last_upper['ema50'] and 
-                    last_upper['close'] > last_upper.get('ema200', 0)
+                    (np.isnan(ema200_upper) or last_upper['close'] > ema200_upper) and
+                    (np.isnan(last_upper['rsi']) or self.rsi_upper_call_threshold < last_upper['rsi'] < self.rsi_upper_call_max)
                 )
                 
                 # 2. SHORT Entry Conditions (Optional as per system.md)
                 trend_short_ok = (
                     row['close'] < row['ema50'] and 
                     row['ema20'] < row['ema50'] and 
-                    row['close'] < row.get('ema200', 999999)
+                    (np.isnan(ema200_lower) or row['close'] < ema200_lower)
                 )
-                rsi_short_ok = row['rsi'] < self.rsi_put_threshold and row['rsi'] < prev_row['rsi']
+                rsi_short_ok = (
+                    self.rsi_put_lower_threshold < row['rsi'] < self.rsi_put_threshold and 
+                    row['rsi'] < prev_row['rsi']
+                )
                 htf_short_ok = (
                     last_upper['close'] < last_upper['ema50'] and 
-                    last_upper['close'] < last_upper.get('ema200', 999999)
+                    (np.isnan(ema200_upper) or last_upper['close'] < ema200_upper) and
+                    (np.isnan(last_upper['rsi']) or self.rsi_upper_put_min < last_upper['rsi'] < self.rsi_upper_put_threshold)
                 )
 
                 candles_window = self.df_to_candles(df_lower.iloc[i-5:i+1])
