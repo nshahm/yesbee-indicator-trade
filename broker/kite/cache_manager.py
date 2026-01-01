@@ -207,6 +207,7 @@ class DateRangeCache:
                 df.set_index('date', inplace=True)
             
             df = df.sort_index()
+            df = df[~df.index.duplicated(keep='first')]
             
             from_date_filter = from_date
             to_date_filter = to_date

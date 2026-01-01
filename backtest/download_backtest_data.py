@@ -25,10 +25,6 @@ sys.path.insert(0, str(project_root))
 
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -123,19 +119,23 @@ class BacktestDataDownloader:
             from broker.kite.kite_connect import KiteConnectBroker
             from broker.kite.historical_data_fetcher import HistoricalDataFetcher
             
+            cache_dir = self.backtest_config.get('backtest', {}).get(
+                'kite_api', {}
+            ).get('cache_dir', 'history_data')
+            
             self.kite_broker = KiteConnectBroker()
             if self.kite_broker.is_connected():
-                cache_dir = self.backtest_config.get('backtest', {}).get(
-                    'kite_api', {}
-                ).get('cache_dir', 'history_data')
-                
                 self.historical_fetcher = HistoricalDataFetcher(
                     self.kite_broker.kite,
                     cache_dir=cache_dir
                 )
                 logger.info("✓ Connected to Kite API")
             else:
-                logger.warning("Failed to connect to Kite API - check credentials")
+                logger.warning("Failed to connect to Kite API - check credentials. Will only use cached data.")
+                self.historical_fetcher = HistoricalDataFetcher(
+                    None,
+                    cache_dir=cache_dir
+                )
                 self.kite_broker = None
         except Exception as e:
             logger.error(f"Error initializing Kite connection: {e}")
@@ -333,6 +333,10 @@ class BacktestDataDownloader:
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     parser = argparse.ArgumentParser(
         description='Download historical index data for backtesting',
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -15,11 +15,11 @@ indices:
       stop_loss:
         enabled: true
         atr:
-          enabled: true
+          enabled: false
           multiplier: 1.2
         fixed:
-          enabled: false
-          points: 25
+          enabled: true
+          points: 45
       trailing:
         enabled: false
         activation_r: 1.5
@@ -32,7 +32,7 @@ indices:
             - { profit_r: 2.5, lock_r: 1.5 }
 
   banknifty:
-    enabled: true
+    enabled: false
     symbol: "BANKNIFTY"
     description: "Bank Nifty Index"
     max_concurrent_trades: 1
@@ -47,11 +47,11 @@ indices:
       stop_loss:
         enabled: true
         atr:
-          enabled: true
+          enabled: false
           multiplier: 1.2
         fixed:
-          enabled: false
-          points: 50
+          enabled: true
+          points: 150
       trailing:
         enabled: false
         activation_r: 1.5

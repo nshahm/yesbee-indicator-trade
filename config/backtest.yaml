@@ -1,8 +1,9 @@
 backtest:
   # Date range format: "YYYYMMDDHHmm_YYYYMMDDHHmm"
-  date_range: "202511010915_202511301530"
-  # date_range: "202501010915_202512311530"
-  
+  # date_range: "202511010915_202511301530"
+    
+  # date_range: "20250201915_202502281530"
+  date_range: "202501010915_202512311530"
   # MTF Intervals
   lower_interval: "15minute"
   upper_interval: "60minute"

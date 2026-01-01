@@ -156,13 +156,20 @@ def run_strategy_for_week(strategy_name: str, options: Dict, symbol: str, df_low
     for t in trades:
         try:
             entry_dt = pd.to_datetime(t.entry_time)
+            # Ensure entry_dt is timezone-aware if week_start is
+            if week_start.tzinfo and not entry_dt.tzinfo:
+                entry_dt = entry_dt.tz_localize(week_start.tzinfo)
+            elif week_start.tzinfo and entry_dt.tzinfo:
+                entry_dt = entry_dt.tz_convert(week_start.tzinfo)
+                
             # Use date comparison for week boundaries
             if week_start <= entry_dt <= week_end:
                 t.symbol = symbol # Ensure symbol is set
                 filtered_trades.append(t)
-        except:
-            # Fallback if time format is unexpected
-            filtered_trades.append(t)
+        except Exception as e:
+            # Skip trades that cause parsing errors to avoid potential duplicates from context
+            with print_lock:
+                print(f"Warning: Could not parse entry time '{t.entry_time}': {e}")
             
     return filtered_trades
 
@@ -265,7 +272,8 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     # Split into weeks and run in parallel
     df_lower_reset = df_lower.reset_index(drop=True)
     # Use isocalendar week for consistent splitting
-    df_lower_reset['week'] = df_lower_reset['date'].dt.isocalendar().week + (df_lower_reset['date'].dt.year * 100)
+    iso_cal = df_lower_reset['date'].dt.isocalendar()
+    df_lower_reset['week'] = iso_cal.week + (iso_cal.year * 100)
     groups = list(df_lower_reset.groupby('week'))
     
     with print_lock:
@@ -310,6 +318,16 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
 
     # Sort trades by entry time
     completed_trades.sort(key=lambda x: x.entry_time)
+    
+    # Final deduplication to be safe
+    seen_trades = set()
+    unique_trades = []
+    for t in completed_trades:
+        trade_id = (t.entry_time, t.option_type, getattr(t, 'pattern', ''))
+        if trade_id not in seen_trades:
+            seen_trades.add(trade_id)
+            unique_trades.append(t)
+    completed_trades = unique_trades
         
     display_summary(completed_trades, symbol, lower_interval, upper_interval)
     return completed_trades
@@ -338,6 +356,16 @@ def display_combined_summary(all_trades: List[Trade]):
 
     # Sort all trades by entry time
     sorted_trades = sorted(all_trades, key=lambda x: x.entry_time)
+
+    # Deduplicate across symbols (unlikely but safe)
+    seen_trades = set()
+    unique_trades = []
+    for t in sorted_trades:
+        trade_id = (t.entry_time, t.option_type, getattr(t, 'symbol', ''))
+        if trade_id not in seen_trades:
+            seen_trades.add(trade_id)
+            unique_trades.append(t)
+    sorted_trades = unique_trades
 
     for t in sorted_trades:
         if t.entry_time == t.exit_time:
@@ -406,87 +434,75 @@ def process_symbol(symbol, backtest_config, options, indices_config, args):
     if not to_date and '_' in date_range:
         to_date = date_range.split('_')[1][:8]
     
-    data_dir = Path(backtest_config.get('data_dir', 'history_data'))
+    # Fallback to defaults if still None
+    if not from_date:
+        from_date = "20250101"
+    if not to_date:
+        to_date = datetime.now().strftime('%Y%m%d')
     
     with print_lock:
         print(f"Target date range for {symbol}: {from_date} to {to_date}")
     
-    def get_df(interval):
-        pattern = f"{symbol.lower()}_*_{interval}_*"
-        files = list(data_dir.glob(f"{pattern}.json"))
-        if not files:
-            return pd.DataFrame()
-        
-        file_path = files[0]
-        if from_date or to_date:
-            for f in files:
-                parts = f.stem.split('_')
-                if len(parts) >= 5:
-                    file_from = parts[-2][:8]
-                    file_to = parts[-1][:8]
-                    if (not from_date or file_to >= from_date) and (not to_date or file_from <= to_date):
-                        file_path = f
-                        break
-        
-        with print_lock:
-            print(f"Using {interval} data from: {file_path}")
-        df = load_data(file_path)
-        return df
-
-    df_lower = get_df(lower_interval)
-    df_upper = get_df(upper_interval)
+    downloader = BacktestDataDownloader(
+        backtest_config_path=args.config,
+        options_config_path=args.options
+    )
     
-    if df_lower.empty or df_upper.empty:
+    token = downloader.INDEX_TOKENS.get(symbol.upper())
+    if not token:
         with print_lock:
-            print(f"Missing data locally for {symbol}. Attempting to download...")
-        
-        # Determine date range for download
-        # Use full range from config if possible, otherwise use args
-        full_date_range = backtest_config.get('date_range', '')
-        if '_' in full_date_range:
-            from_full, to_full = full_date_range.split('_')
-        else:
-            from_full = f"{from_date}0915" if from_date else "202501010915"
-            to_full = f"{to_date}1530" if to_date else datetime.now().strftime('%Y%m%d%H%M')
-            
-        downloader = BacktestDataDownloader(
-            backtest_config_path=args.config,
-            options_config_path=args.options
-        )
-        
-        indices = {symbol.upper(): ''}
-        timeframes_to_download = []
-        if df_lower.empty: timeframes_to_download.append(lower_interval)
-        if df_upper.empty: timeframes_to_download.append(upper_interval)
-        
-        try:
-            f_dt = datetime.strptime(from_full, '%Y%m%d%H%M')
-            t_dt = datetime.strptime(to_full, '%Y%m%d%H%M')
-            # Handle inverted range if any
-            if t_dt < f_dt:
-                f_dt, t_dt = t_dt, f_dt
-        except:
-            f_dt, t_dt = downloader.get_date_range()
-            
-        downloader.download_index_data(
-            indices=indices,
-            timeframes=timeframes_to_download,
-            from_date=f_dt,
-            to_date=t_dt
-        )
-        
-        # Retry loading
-        if df_lower.empty: df_lower = get_df(lower_interval)
-        if df_upper.empty: df_upper = get_df(upper_interval)
-
-    if df_lower.empty or df_upper.empty:
-        with print_lock:
-            print(f"Unable to resolve missing data for {symbol} ({lower_interval}, {upper_interval})")
+            print(f"Token not found for {symbol}. Cannot load data.")
         return []
+    
+    try:
+        f_dt = datetime.strptime(from_date + "0915", "%Y%m%d%H%M")
+        t_dt = datetime.strptime(to_date + "1530", "%Y%m%d%H%M")
+    except Exception as e:
+        with print_lock:
+            print(f"Error parsing date range: {e}. Using config default.")
+        f_dt, t_dt = downloader.get_date_range()
+
+    with print_lock:
+        print(f"Fetching {lower_interval} data for {symbol}...")
+    df_lower = downloader.historical_fetcher.fetch_historical_data(
+        instrument_token=token,
+        interval=lower_interval,
+        from_date=f_dt,
+        to_date=t_dt,
+        index_name=symbol.lower()
+    )
+    
+    with print_lock:
+        print(f"Fetching {upper_interval} data for {symbol}...")
+    df_upper = downloader.historical_fetcher.fetch_historical_data(
+        instrument_token=token,
+        interval=upper_interval,
+        from_date=f_dt,
+        to_date=t_dt,
+        index_name=symbol.lower()
+    )
+
+    if df_lower is None or df_lower.empty or df_upper is None or df_upper.empty:
+        with print_lock:
+            print(f"Unable to resolve data for {symbol} ({lower_interval}, {upper_interval})")
+        return []
+
+    # Reset index to match run_backtest_wrapper expectations if needed
+    if 'date' not in df_lower.columns:
+        df_lower = df_lower.reset_index()
+    if 'date' not in df_upper.columns:
+        df_upper = df_upper.reset_index()
 
     return run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
 
 def main():
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(message)s'
+    )
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    
     parser = argparse.ArgumentParser(description='Backtest candlestick patterns on historical data')
     parser.add_argument('--symbol', type=str, help='Symbol (e.g., nifty50, banknifty)')
     parser.add_argument('--lower-interval', type=str, help='Lower Interval (e.g., 5minute)')

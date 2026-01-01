@@ -18,11 +18,11 @@ class HistoricalDataFetcher:
     
     MAX_DAYS_PER_CALL = 100
     
-    def __init__(self, kite_client: KiteConnect, cache_dir: str = "history_data"):
+    def __init__(self, kite_client: Optional[KiteConnect], cache_dir: str = "history_data"):
         """Initialize the fetcher.
         
         Args:
-            kite_client: Initialized KiteConnect instance
+            kite_client: Initialized KiteConnect instance or None
             cache_dir: Directory to cache downloaded data
         """
         self.kite = kite_client
@@ -118,6 +118,10 @@ class HistoricalDataFetcher:
             List of candle data or None if failed
         """
         try:
+            if not self.kite:
+                logger.error("Kite client not initialized. Cannot fetch data from API.")
+                return None
+                
             logger.info(
                 f"Fetching {instrument_token} {interval} "
                 f"from {from_date.strftime('%Y-%m-%d %H:%M')} "
