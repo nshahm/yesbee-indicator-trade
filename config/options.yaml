@@ -15,10 +15,10 @@ indices:
       stop_loss:
         enabled: true
         atr:
-          enabled: false
+          enabled: true
           multiplier: 1.2
         fixed:
-          enabled: true
+          enabled: false
           points: 25
       trailing:
         enabled: false
@@ -47,10 +47,10 @@ indices:
       stop_loss:
         enabled: true
         atr:
-          enabled: false
+          enabled: true
           multiplier: 1.2
         fixed:
-          enabled: true
+          enabled: false
           points: 50
       trailing:
         enabled: false
