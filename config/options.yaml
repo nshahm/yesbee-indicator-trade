@@ -45,7 +45,7 @@ risk_management:
       multiplier: 1.2
     fixed:
       enabled: true
-      points: 45
+      points: 25
   trailing:
     enabled: false
     activation_r: 1.5
