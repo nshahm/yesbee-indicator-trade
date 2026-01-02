@@ -71,18 +71,20 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
     table = Table(title=f"📈 Trade Summary: {symbol} ({lower_interval}/{upper_interval})")
     
     table.add_column("Type", style="cyan")
-    table.add_column("Entry Time", style="green")
-    table.add_column("Exit Time", style="red")
+    table.add_column("Entry Time", style="green", min_width=16)
+    table.add_column("Exit Time", style="red", min_width=16)
     table.add_column("Qty", justify="right", style="magenta")
-    table.add_column("Entry", justify="right", style="green")
-    table.add_column("Exit", justify="right", style="red")
-    table.add_column("Stop Loss", justify="right", style="yellow")
-    table.add_column("RSI (L/U) | ADX", justify="right", style="cyan")
-    table.add_column("P&L", justify="right", style="bold")
+    table.add_column("Entry", justify="right", style="green", min_width=10)
+    table.add_column("Exit", justify="right", style="red", min_width=10)
+    table.add_column("Stop Loss", justify="right", style="yellow", min_width=10)
+    table.add_column("RSI (L/U) | ADX", justify="right", style="cyan", min_width=15)
+    table.add_column("P&L", justify="right", style="bold", min_width=10)
     table.add_column("R:R", justify="right", style="blue")
     table.add_column("Result", justify="center")
 
     total_pnl = 0
+    total_profit_points = 0
+    total_loss_points = 0
     wins = 0
     losses = 0
 
@@ -91,6 +93,11 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
             continue
             
         pnl_per_unit = t.exit_price - t.entry_price if t.option_type == 'CALL' else t.entry_price - t.exit_price
+        if pnl_per_unit > 0:
+            total_profit_points += pnl_per_unit
+        else:
+            total_loss_points += abs(pnl_per_unit)
+            
         quantity = getattr(t, 'quantity', 1) or 1
         total_trade_pnl = pnl_per_unit * quantity
         total_pnl += total_trade_pnl
@@ -138,8 +145,10 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
         # Performance Metrics
         total_trades = wins + losses
         win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+        net_profit_points = total_profit_points - total_loss_points
         console.print(f"\n[bold]Performance Metrics:[/bold]")
         console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
+        console.print(f"Profit Points: [green]{total_profit_points:.2f}[/green] | Loss Points: [red]{total_loss_points:.2f}[/red] | Net Profit Points: [bold {'green' if net_profit_points > 0 else 'red'}]{net_profit_points:.2f}[/bold {'green' if net_profit_points > 0 else 'red'}]")
         console.print(f"Total Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
 
 def run_strategy_for_week(strategy_name: str, options: Dict, symbol: str, df_lower_week: pd.DataFrame, df_upper: pd.DataFrame, week_start: pd.Timestamp, week_end: pd.Timestamp) -> List[Trade]:
@@ -360,17 +369,19 @@ def display_combined_summary(all_trades: List[Trade]):
     console = Console()
     table = Table(title="📊 [bold blue]Combined Performance Summary (All Indices)[/bold blue]")
     
-    table.add_column("Symbol", style="cyan")
+    table.add_column("Symbol", style="cyan", min_width=10)
     table.add_column("Type", style="cyan")
-    table.add_column("Entry Time", style="green")
-    table.add_column("Exit Time", style="red")
+    table.add_column("Entry Time", style="green", min_width=16)
+    table.add_column("Exit Time", style="red", min_width=16)
     table.add_column("Qty", justify="right", style="magenta")
-    table.add_column("Entry", justify="right", style="green")
-    table.add_column("Exit", justify="right", style="red")
-    table.add_column("P&L", justify="right", style="bold")
+    table.add_column("Entry", justify="right", style="green", min_width=10)
+    table.add_column("Exit", justify="right", style="red", min_width=10)
+    table.add_column("P&L", justify="right", style="bold", min_width=10)
     table.add_column("Result", justify="center")
 
     total_pnl = 0
+    total_profit_points = 0
+    total_loss_points = 0
     wins = 0
     losses = 0
 
@@ -392,6 +403,11 @@ def display_combined_summary(all_trades: List[Trade]):
             continue
             
         pnl_per_unit = t.exit_price - t.entry_price if t.option_type == 'CALL' else t.entry_price - t.exit_price
+        if pnl_per_unit > 0:
+            total_profit_points += pnl_per_unit
+        else:
+            total_loss_points += abs(pnl_per_unit)
+            
         quantity = getattr(t, 'quantity', 1) or 1
         total_trade_pnl = pnl_per_unit * quantity
         total_pnl += total_trade_pnl
@@ -428,8 +444,10 @@ def display_combined_summary(all_trades: List[Trade]):
     # Performance Metrics
     total_trades = wins + losses
     win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    net_profit_points = total_profit_points - total_loss_points
     console.print(f"\n[bold]Combined Performance Metrics:[/bold]")
     console.print(f"Total Trades: {total_trades} | Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.1f}%")
+    console.print(f"Profit Points: [green]{total_profit_points:.2f}[/green] | Loss Points: [red]{total_loss_points:.2f}[/red] | Net Profit Points: [bold {'green' if net_profit_points > 0 else 'red'}]{net_profit_points:.2f}[/bold {'green' if net_profit_points > 0 else 'red'}]")
     console.print(f"Cumulative Net P&L: [bold {'green' if total_pnl > 0 else 'red'}]{total_pnl:.2f}[/bold {'green' if total_pnl > 0 else 'red'}]")
     console.print("-" * 50 + "\n")
 

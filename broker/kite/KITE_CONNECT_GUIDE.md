@@ -42,7 +42,7 @@ kite:
     order_type: "MARKET"
   
   instruments:
-    symbols: ["NIFTY50", "BANKNIFTY", "FINNIFTY"]
+    symbols: ["NIFTY50", "BANKNIFTY", "SENSEX"]
 ```
 
 ### 2. Credentials in config/kite-config.yaml

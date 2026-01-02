@@ -12,22 +12,25 @@ indices:
     risk_management:
       capital: 100000
       risk_per_trade: 1.0
+      quantity: 1
       max_open_trades: 3
       daily_max_loss: 3.0
       max_trades_per_day: 10
       max_consecutive_losses_per_day: 3
       stop_loss:
         enabled: true
-        atr:
-          enabled: false
-          multiplier: 1.2
-        fixed:
+        atr: # works well with 2.0
           enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
           points: 45
       trailing:
         enabled: false
         activation_r: 1.5
         multiplier: 1.0
+        candle_trailing:
+          enabled: false
         step_trailing:
           enabled: true
           levels:
@@ -46,39 +49,76 @@ indices:
       # lower: "5minute"
       # upper: "15minute"
     risk_management:
+      quantity: 1
       max_trades_per_day: 10
       max_consecutive_losses_per_day: 5
       stop_loss:
         enabled: true
-        atr:
-          enabled: false
+        atr: #works well with 1.2
+          enabled: true
           multiplier: 1.2
         fixed:
-          enabled: true
+          enabled: false
           points: 150
       trailing:
         enabled: false
         activation_r: 1.5
         multiplier: 1.0
+        candle_trailing:
+          enabled: false
         step_trailing:
           enabled: true
           levels:
             - { profit_r: 0.8, lock_r: 0.0 }
             - { profit_r: 1.5, lock_r: 0.5 }
             - { profit_r: 2.5, lock_r: 1.5 }
-  finnifty:
+  sensex:
+    enabled: true
+    symbol: "SENSEX"
+    description: "BSE Sensex Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "5minute"
+      upper: "15minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 5
+      stop_loss:
+        enabled: true
+        atr:  # works well with atr 2
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 200
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_finance:
     enabled: false
-    symbol: "FINNIFTY"
-    description: "Nifty Financial Services"
+    symbol: "NIFTY_FINANCE"
+    description: "Nifty Financial Services Index"
     max_concurrent_trades: 1
     timeframes:
       lower: "15minute"
       upper: "60minute"
-      # lower: "5minute"
-      # upper: "15minute"
     risk_management:
       capital: 100000
       risk_per_trade: 1.0
+      quantity: 1
       max_open_trades: 3
       daily_max_loss: 3.0
       max_trades_per_day: 10
@@ -86,15 +126,276 @@ indices:
       stop_loss:
         enabled: true
         atr:
-          enabled: false
-          multiplier: 1.2
-        fixed:
           enabled: true
-          points: 20
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
       trailing:
         enabled: false
         activation_r: 1.5
         multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_it:
+    enabled: false
+    symbol: "NIFTY_IT"
+    description: "Nifty IT Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_realty:
+    enabled: false
+    symbol: "NIFTY_REALTY"
+    description: "Nifty Realty Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_infra:
+    enabled: false
+    symbol: "NIFTY_INFRA"
+    description: "Nifty Infrastructure Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_energy:
+    enabled: false
+    symbol: "NIFTY_ENERGY"
+    description: "Nifty Energy Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_fmcg:
+    enabled: false
+    symbol: "NIFTY_FMCG"
+    description: "Nifty FMCG Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_pharma:
+    enabled: false
+    symbol: "NIFTY_PHARMA"
+    description: "Nifty Pharma Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
+        step_trailing:
+          enabled: true
+          levels:
+            - { profit_r: 0.8, lock_r: 0.0 }
+            - { profit_r: 1.5, lock_r: 0.5 }
+            - { profit_r: 2.5, lock_r: 1.5 }
+
+  nifty_auto:
+    enabled: false
+    symbol: "NIFTY_AUTO"
+    description: "Nifty Auto Index"
+    max_concurrent_trades: 1
+    timeframes:
+      lower: "15minute"
+      upper: "60minute"
+    risk_management:
+      capital: 100000
+      risk_per_trade: 1.0
+      quantity: 1
+      max_open_trades: 3
+      daily_max_loss: 3.0
+      max_trades_per_day: 10
+      max_consecutive_losses_per_day: 3
+      stop_loss:
+        enabled: true
+        atr:
+          enabled: true
+          multiplier: 2
+        fixed:
+          enabled: false
+          points: 45
+      trailing:
+        enabled: false
+        activation_r: 1.5
+        multiplier: 1.0
+        candle_trailing:
+          enabled: false
         step_trailing:
           enabled: true
           levels:
@@ -105,7 +406,7 @@ indices:
 trading_style: "intraday"
 
 trading_hours:
-  start_time: "09:20"
+  start_time: "09:15"
   end_time: "15:00"
 
 indicators:

@@ -16,6 +16,7 @@ class Trade:
     entry_time: str
     entry_price: float
     symbol: Optional[str] = None
+    quantity: int = 1
     rsi: Optional[float] = None
     rsi_upper: Optional[float] = None
     adx: Optional[float] = None
@@ -23,6 +24,7 @@ class Trade:
     initial_risk: Optional[float] = None
     exit_time: Optional[str] = None
     exit_price: Optional[float] = None
+    pnl: Optional[float] = None
 
 class OptionSignal:
     def __init__(self, action: str, option_type: str, pattern: str, rsi_value: Optional[float] = None, rsi_upper: Optional[float] = None, adx_value: Optional[float] = None, confirmation: str = "N/A"):
@@ -230,6 +232,8 @@ class OptionStrategy:
         
         # Risk management from index config, fallback to global
         self.risk_management = index_config.get('risk_management', options.get('risk_management', {}))
+        self.capital = self.risk_management.get('capital', 100000)
+        self.risk_per_trade_percent = self.risk_management.get('risk_per_trade', 1.0) / 100.0
         self.max_trades_per_day = self.risk_management.get('max_trades_per_day', 0)
         self.max_consecutive_losses_per_day = self.risk_management.get('max_consecutive_losses_per_day', 0)
         self.sl_config = self.risk_management.get('stop_loss', {})
@@ -239,8 +243,22 @@ class OptionStrategy:
         self.fixed_sl_config = self.sl_config.get('fixed', {})
         self.trailing_enabled = self.trailing_config.get('enabled', True)
         
+        # New: Fixed quantity support
+        self.quantity = self.risk_management.get('quantity', 1)
+        
         self.patterns = self._get_enabled_patterns()
         
+    def calculate_quantity(self, entry_price: float, stop_loss: float) -> int:
+        # If quantity is set in config, use it
+        if 'quantity' in self.risk_management:
+            return self.risk_management['quantity']
+            
+        risk_amount = self.capital * self.risk_per_trade_percent
+        price_risk = abs(entry_price - stop_loss)
+        if price_risk == 0:
+            return 1 # Default to 1 if no risk defined
+        return max(1, int(risk_amount / price_risk))
+
     def _get_initial_risk(self, current_atr: float) -> float:
         risks = []
         if self.atr_sl_config.get('enabled', True):
@@ -385,227 +403,156 @@ class OptionStrategy:
             candles_lower = df_to_candles(window_df_lower)
 
             # Handle EXITS
-            current_pos = 'CALL' if active_trades['CALL'] else 'PUT' if active_trades['PUT'] else None
-            
-            # 1. Check Stop Loss and Force Session Exit
-            if current_pos:
-                trade = active_trades[current_pos]
-                is_exit_triggered = False
-                exit_price = current_row_lower['close']
-
-                # Trailing Stop Loss Logic from stoploss.md
-                if self.trailing_enabled:
-                    if current_pos == 'CALL':
-                        highest_price_since_entry['CALL'] = max(highest_price_since_entry['CALL'], current_row_lower['high'])
-                        current_profit = current_row_lower['close'] - trade.entry_price
-                        profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
-                        
-                        new_sl = trade.stop_loss
-                        
-                        # 1. Step Trailing
-                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
-                            levels = self.trailing_config['step_trailing'].get('levels', [])
-                            for level in levels:
-                                if profit_r >= level['profit_r']:
-                                    locked_sl = trade.entry_price + (level['lock_r'] * trade.initial_risk)
-                                    if new_sl is None:
-                                        new_sl = locked_sl
-                                    else:
-                                        new_sl = max(new_sl, locked_sl)
-                        
-                        # 2. Candle-based trailing (Original requirement)
-                        if i > 2:
-                            prev_row = df_lower.iloc[i-2]
-                            if current_row_lower['close'] > trade.entry_price:
-                                if new_sl is None:
-                                    new_sl = prev_row['low']
-                                else:
-                                    new_sl = max(new_sl, prev_row['low'])
-                        
-                        # 3. ATR-based trailing (Universal Setup)
-                        activation_r = self.trailing_config.get('activation_r', 1.8)
-                        if profit_r >= activation_r:
-                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
-                            atr_trail = highest_price_since_entry['CALL'] - (current_atr * trail_multiplier)
-                            if new_sl is None:
-                                new_sl = atr_trail
-                            else:
-                                new_sl = max(new_sl, atr_trail)
-                        
-                        trade.stop_loss = new_sl
-
-                    else: # PUT
-                        lowest_price_since_entry['PUT'] = min(lowest_price_since_entry['PUT'], current_row_lower['low'])
-                        current_profit = trade.entry_price - current_row_lower['close']
-                        profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
-                        
-                        new_sl = trade.stop_loss
-                        
-                        # 1. Step Trailing
-                        if self.trailing_config.get('step_trailing', {}).get('enabled', False):
-                            levels = self.trailing_config['step_trailing'].get('levels', [])
-                            for level in levels:
-                                if profit_r >= level['profit_r']:
-                                    locked_sl = trade.entry_price - (level['lock_r'] * trade.initial_risk)
-                                    if new_sl is None:
-                                        new_sl = locked_sl
-                                    else:
-                                        new_sl = min(new_sl, locked_sl)
-                        
-                        # 2. Candle-based trailing
-                        if i > 2:
-                            prev_row = df_lower.iloc[i-2]
-                            if current_row_lower['close'] < trade.entry_price:
-                                if new_sl is None:
-                                    new_sl = prev_row['high']
-                                else:
-                                    new_sl = min(new_sl, prev_row['high'])
-                                
-                        # 3. ATR-based trailing
-                        activation_r = self.trailing_config.get('activation_r', 1.8)
-                        if profit_r >= activation_r:
-                            trail_multiplier = self.trailing_config.get('multiplier', 1.2)
-                            atr_trail = lowest_price_since_entry['PUT'] + (current_atr * trail_multiplier)
-                            if new_sl is None:
-                                new_sl = atr_trail
-                            else:
-                                new_sl = min(new_sl, atr_trail)
-                        
-                        trade.stop_loss = new_sl
-
-                # Check Stop Loss (Prioritized over session exit)
-                if trade.stop_loss is not None:
-                    if current_pos == 'CALL':
-                        if current_row_lower['low'] <= trade.stop_loss:
-                            is_exit_triggered = True
-                            exit_price = trade.stop_loss
-                    else: # PUT
-                        if current_row_lower['high'] >= trade.stop_loss:
-                            is_exit_triggered = True
-                            exit_price = trade.stop_loss
-
-                # Force Session Exit (if SL not hit)
-                if not is_exit_triggered and force_session_exit:
-                    is_exit_triggered = True
+            for opt_type in ['CALL', 'PUT']:
+                if active_trades[opt_type]:
+                    trade = active_trades[opt_type]
+                    is_exit_triggered = False
                     exit_price = current_row_lower['close']
-                
-                if is_exit_triggered:
-                    trade.exit_time = current_row_lower['date'].isoformat()
-                    trade.exit_price = exit_price
-                    completed_trades.append(trade)
+
+                    # Trailing Stop Loss Logic from stoploss.md
+                    if self.trailing_enabled:
+                        if opt_type == 'CALL':
+                            highest_price_since_entry['CALL'] = max(highest_price_since_entry['CALL'], current_row_lower['high'])
+                            current_profit = current_row_lower['close'] - trade.entry_price
+                            profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
+                            
+                            new_sl = trade.stop_loss
+                            
+                            # 1. Step Trailing
+                            if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                                levels = self.trailing_config['step_trailing'].get('levels', [])
+                                for level in levels:
+                                    if profit_r >= level['profit_r']:
+                                        locked_sl = trade.entry_price + (level['lock_r'] * trade.initial_risk)
+                                        if new_sl is None:
+                                            new_sl = locked_sl
+                                        else:
+                                            new_sl = max(new_sl, locked_sl)
+                            
+                            # 2. Candle-based trailing (Original requirement)
+                            if self.trailing_config.get('candle_trailing', {}).get('enabled', False) and i > 2:
+                                prev_row = df_lower.iloc[i-2]
+                                if current_row_lower['close'] > trade.entry_price:
+                                    if new_sl is None:
+                                        new_sl = prev_row['low']
+                                    else:
+                                        new_sl = max(new_sl, prev_row['low'])
+                            
+                            # 3. ATR-based trailing (Universal Setup)
+                            activation_r = self.trailing_config.get('activation_r', 1.8)
+                            if profit_r >= activation_r:
+                                trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                                atr_trail = highest_price_since_entry['CALL'] - (current_atr * trail_multiplier)
+                                if new_sl is None:
+                                    new_sl = atr_trail
+                                else:
+                                    new_sl = max(new_sl, atr_trail)
+                            
+                            # Update stop_loss if new_sl is better than current
+                            if new_sl is not None:
+                                if trade.stop_loss is None:
+                                    trade.stop_loss = new_sl
+                                else:
+                                    trade.stop_loss = max(trade.stop_loss, new_sl)
+
+                        else: # PUT
+                            lowest_price_since_entry['PUT'] = min(lowest_price_since_entry['PUT'], current_row_lower['low'])
+                            current_profit = trade.entry_price - current_row_lower['close']
+                            profit_r = current_profit / trade.initial_risk if trade.initial_risk > 0 else 0
+                            
+                            new_sl = trade.stop_loss
+                            
+                            # 1. Step Trailing
+                            if self.trailing_config.get('step_trailing', {}).get('enabled', False):
+                                levels = self.trailing_config['step_trailing'].get('levels', [])
+                                for level in levels:
+                                    if profit_r >= level['profit_r']:
+                                        locked_sl = trade.entry_price - (level['lock_r'] * trade.initial_risk)
+                                        if new_sl is None:
+                                            new_sl = locked_sl
+                                        else:
+                                            new_sl = min(new_sl, locked_sl)
+                            
+                            # 2. Candle-based trailing
+                            if self.trailing_config.get('candle_trailing', {}).get('enabled', False) and i > 2:
+                                prev_row = df_lower.iloc[i-2]
+                                if current_row_lower['close'] < trade.entry_price:
+                                    if new_sl is None:
+                                        new_sl = prev_row['high']
+                                    else:
+                                        new_sl = min(new_sl, prev_row['high'])
+                                    
+                            # 3. ATR-based trailing
+                            activation_r = self.trailing_config.get('activation_r', 1.8)
+                            if profit_r >= activation_r:
+                                trail_multiplier = self.trailing_config.get('multiplier', 1.2)
+                                atr_trail = lowest_price_since_entry['PUT'] + (current_atr * trail_multiplier)
+                                if new_sl is None:
+                                    new_sl = atr_trail
+                                else:
+                                    new_sl = min(new_sl, atr_trail)
+                            
+                            # Update stop_loss if new_sl is better than current
+                            if new_sl is not None:
+                                if trade.stop_loss is None:
+                                    trade.stop_loss = new_sl
+                                else:
+                                    trade.stop_loss = min(trade.stop_loss, new_sl)
+
+                    # Check Stop Loss (Prioritized over session exit)
+                    if trade.stop_loss is not None:
+                        if opt_type == 'CALL':
+                            if current_row_lower['low'] <= trade.stop_loss:
+                                is_exit_triggered = True
+                                exit_price = trade.stop_loss
+                        else: # PUT
+                            if current_row_lower['high'] >= trade.stop_loss:
+                                is_exit_triggered = True
+                                exit_price = trade.stop_loss
+
+                    # Force Session Exit (if SL not hit)
+                    if not is_exit_triggered and force_session_exit:
+                        is_exit_triggered = True
+                        exit_price = current_row_lower['close']
                     
-                    # Update Risk Management: Consecutive Losses
-                    is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
-                              (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
-                    if is_loss:
-                        consecutive_losses_today += 1
-                    else:
-                        consecutive_losses_today = 0
+                    if is_exit_triggered:
+                        trade.exit_time = current_row_lower['date'].isoformat()
+                        trade.exit_price = exit_price
+                        completed_trades.append(trade)
                         
-                    active_trades[current_pos] = None
-                    last_exit_time = current_time
-                    current_pos = None
+                        # Update Risk Management: Consecutive Losses
+                        is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
+                                  (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
+                        if is_loss:
+                            consecutive_losses_today += 1
+                        else:
+                            consecutive_losses_today = 0
+                            
+                        active_trades[opt_type] = None
+                        last_exit_time = current_time
 
             # 2. Exit if RSI trend REVERSES or Double Cross Reversal
-            if current_pos:
-                is_reversal = (rsi_trend_signal and rsi_trend_signal != current_pos) or \
-                              (double_cross_signal and double_cross_signal != current_pos)
-                
-                # Exit if stochastic exits extreme zone (Double Cross Exit)
-                stoch_exit = False
-                if self.stoch_config.get('enabled', True):
-                    if current_pos == 'CALL' and curr_stoch_k > 70: # Standard exit for long
-                         stoch_exit = True
-                    elif current_pos == 'PUT' and curr_stoch_k < 30: # Standard exit for short
-                         stoch_exit = True
-
-                if is_reversal or stoch_exit:
-                    # MTF Check for reversal
-                    mtf_aligned = (current_pos == 'CALL' and upper_category == 'Bullish') or \
-                                  (current_pos == 'PUT' and upper_category == 'Bearish')
+            for opt_type in ['CALL', 'PUT']:
+                if active_trades[opt_type]:
+                    is_reversal = (rsi_trend_signal and rsi_trend_signal != opt_type) or \
+                                  (double_cross_signal and double_cross_signal != opt_type)
                     
-                    # Only exit if MTF is not aligned OR if the reversal signal is strong
-                    if not mtf_aligned or stoch_exit:
-                        trade = active_trades[current_pos]
-                        if trade:
-                            trade.exit_time = current_row_lower['date'].isoformat()
-                            trade.exit_price = current_row_lower['close']
-                            completed_trades.append(trade)
-                            
-                            # Update Risk Management: Consecutive Losses
-                            is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
-                                      (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
-                            if is_loss:
-                                consecutive_losses_today += 1
-                            else:
-                                consecutive_losses_today = 0
-                                
-                            active_trades[current_pos] = None
-                            last_exit_time = current_time
-                            current_pos = None
+                    # Exit if stochastic exits extreme zone (Double Cross Exit)
+                    stoch_exit = False
+                    if self.stoch_config.get('enabled', True):
+                        if opt_type == 'CALL' and curr_stoch_k > 70: # Standard exit for long
+                             stoch_exit = True
+                        elif opt_type == 'PUT' and curr_stoch_k < 30: # Standard exit for short
+                             stoch_exit = True
 
-            # 3. Exit based on patterns and UTF trend
-            if current_pos:
-                # Check for lower timeframe reversal patterns
-                found_exit = False
-                for category_lower, pats in self.patterns.items():
-                    if found_exit: break
-                    for pattern_func in pats:
-                        if pattern_func(candles_lower):
-                            pattern_name = pattern_func.__name__
-                            signals = get_option_signals(
-                                category_lower, 
-                                pattern_name, 
-                                upper_category, 
-                                current_position=current_pos,
-                                rsi_value=current_rsi,
-                                rsi_upper=current_rsi_upper,
-                                adx_value=current_adx,
-                                rsi_config=self.rsi_config,
-                                adx_config=self.adx_config,
-                                df=df_lower,
-                                index=i-1
-                            )
-                            
-                            for signal in signals:
-                                if signal.action == 'EXIT':
-                                    trade = active_trades[signal.option_type]
-                                    if trade:
-                                        trade.exit_time = current_row_lower['date'].isoformat()
-                                        trade.exit_price = current_row_lower['close']
-                                        completed_trades.append(trade)
-                                        
-                                        # Update Risk Management: Consecutive Losses
-                                        is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
-                                                  (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
-                                        if is_loss:
-                                            consecutive_losses_today += 1
-                                        else:
-                                            consecutive_losses_today = 0
-                                            
-                                        active_trades[signal.option_type] = None
-                                        last_exit_time = current_time
-                                        current_pos = None
-                                        found_exit = True
-                                        break
-                        if found_exit: break
-
-                # If no pattern exit, check for UTF trend change exit
-                if current_pos:
-                    utf_exit_signals = get_option_signals(
-                        'Neutral', 
-                        'UTF_TREND_CHANGE', 
-                        upper_category, 
-                        current_position=current_pos,
-                        rsi_value=current_rsi,
-                        rsi_upper=current_rsi_upper,
-                        adx_value=current_adx,
-                        rsi_config=self.rsi_config,
-                        adx_config=self.adx_config
-                    )
-                    for signal in utf_exit_signals:
-                        if signal.action == 'EXIT':
-                            trade = active_trades[signal.option_type]
+                    if is_reversal or stoch_exit:
+                        # MTF Check for reversal
+                        mtf_aligned = (opt_type == 'CALL' and upper_category == 'Bullish') or \
+                                      (opt_type == 'PUT' and upper_category == 'Bearish')
+                        
+                        # Only exit if MTF is not aligned OR if the reversal signal is strong
+                        if not mtf_aligned or stoch_exit:
+                            trade = active_trades[opt_type]
                             if trade:
                                 trade.exit_time = current_row_lower['date'].isoformat()
                                 trade.exit_price = current_row_lower['close']
@@ -619,10 +566,87 @@ class OptionStrategy:
                                 else:
                                     consecutive_losses_today = 0
                                     
-                                active_trades[signal.option_type] = None
+                                active_trades[opt_type] = None
                                 last_exit_time = current_time
-                                current_pos = None
-                                break
+
+            # 3. Exit based on patterns and UTF trend
+            for opt_type in ['CALL', 'PUT']:
+                if active_trades[opt_type]:
+                    # Check for lower timeframe reversal patterns
+                    found_exit = False
+                    for category_lower, pats in self.patterns.items():
+                        if found_exit: break
+                        for pattern_func in pats:
+                            if pattern_func(candles_lower):
+                                pattern_name = pattern_func.__name__
+                                signals = get_option_signals(
+                                    category_lower, 
+                                    pattern_name, 
+                                    upper_category, 
+                                    current_position=opt_type,
+                                    rsi_value=current_rsi,
+                                    rsi_upper=current_rsi_upper,
+                                    adx_value=current_adx,
+                                    rsi_config=self.rsi_config,
+                                    adx_config=self.adx_config,
+                                    df=df_lower,
+                                    index=i-1
+                                )
+                                
+                                for signal in signals:
+                                    if signal.action == 'EXIT':
+                                        trade = active_trades[opt_type]
+                                        if trade:
+                                            trade.exit_time = current_row_lower['date'].isoformat()
+                                            trade.exit_price = current_row_lower['close']
+                                            completed_trades.append(trade)
+                                            
+                                            # Update Risk Management: Consecutive Losses
+                                            is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
+                                                      (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
+                                            if is_loss:
+                                                consecutive_losses_today += 1
+                                            else:
+                                                consecutive_losses_today = 0
+                                                
+                                            active_trades[opt_type] = None
+                                            last_exit_time = current_time
+                                            found_exit = True
+                                            break
+                            if found_exit: break
+
+                    # If no pattern exit, check for UTF trend change exit
+                    if active_trades[opt_type]:
+                        utf_exit_signals = get_option_signals(
+                            'Neutral', 
+                            'UTF_TREND_CHANGE', 
+                            upper_category, 
+                            current_position=opt_type,
+                            rsi_value=current_rsi,
+                            rsi_upper=current_rsi_upper,
+                            adx_value=current_adx,
+                            rsi_config=self.rsi_config,
+                            adx_config=self.adx_config
+                        )
+                        for signal in utf_exit_signals:
+                            if signal.action == 'EXIT':
+                                trade = active_trades[opt_type]
+                                if trade:
+                                    trade.exit_time = current_row_lower['date'].isoformat()
+                                    trade.exit_price = current_row_lower['close']
+                                    completed_trades.append(trade)
+                                    
+                                    # Update Risk Management: Consecutive Losses
+                                    is_loss = (trade.option_type == 'CALL' and trade.exit_price < trade.entry_price) or \
+                                              (trade.option_type == 'PUT' and trade.exit_price > trade.entry_price)
+                                    if is_loss:
+                                        consecutive_losses_today += 1
+                                    else:
+                                        consecutive_losses_today = 0
+                                        
+                                    active_trades[opt_type] = None
+                                    last_exit_time = current_time
+                                    break
 
             # Handle ENTRIES
             can_enter = is_within_hours
@@ -638,17 +662,16 @@ class OptionStrategy:
                 can_enter = False
 
             if can_enter:
-                current_active_count = sum(1 for t in active_trades.values() if t is not None)
-                if current_active_count < self.max_concurrent_trades:
-                    current_pos = 'CALL' if active_trades['CALL'] else 'PUT' if active_trades['PUT'] else None
-                    
-                    # ADX Trend Strength Filter
-                    adx_ok = True
-                    if self.adx_enabled:
-                        adx_ok = current_adx > self.adx_threshold if current_adx is not None else False
+                # ADX Trend Strength Filter
+                adx_ok = True
+                if self.adx_enabled:
+                    adx_ok = current_adx > self.adx_threshold if current_adx is not None else False
 
-                    # 1. Entry based on RSI Trend
-                    if current_pos is None and rsi_trend_signal and adx_ok:
+                current_active_count = sum(1 for t in active_trades.values() if t is not None)
+                
+                # 1. Entry based on RSI Trend
+                if current_active_count < self.max_concurrent_trades and rsi_trend_signal and adx_ok:
+                    if active_trades[rsi_trend_signal] is None:
                         initial_risk = self._get_initial_risk(current_atr)
                         
                         if rsi_trend_signal == 'CALL':
@@ -658,12 +681,14 @@ class OptionStrategy:
                             sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
                             lowest_price_since_entry['PUT'] = current_row_lower['low']
                             
+                        qty = self.calculate_quantity(current_row_lower['close'], sl_price) if sl_price else 1
                         active_trades[rsi_trend_signal] = Trade(
                             option_type=rsi_trend_signal,
                             pattern='RSI_TREND',
                             confirmation='RSI_SMOOTH',
                             entry_time=current_row_lower['date'].isoformat(),
                             entry_price=current_row_lower['close'],
+                            quantity=qty,
                             rsi=current_rsi,
                             rsi_upper=current_rsi_upper,
                             adx=current_adx,
@@ -671,7 +696,6 @@ class OptionStrategy:
                             initial_risk=initial_risk
                         )
                         trades_today += 1
-                        current_pos = rsi_trend_signal
                         current_active_count += 1
 
                     # 2. Entry based on Double Cross
@@ -686,12 +710,14 @@ class OptionStrategy:
                                 sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
                                 lowest_price_since_entry['PUT'] = current_row_lower['low']
                                 
+                            qty = self.calculate_quantity(current_row_lower['close'], sl_price) if sl_price else 1
                             active_trades[double_cross_signal] = Trade(
                                 option_type=double_cross_signal,
                                 pattern='DOUBLE_CROSS',
                                 confirmation='MACD_STOCH',
                                 entry_time=current_row_lower['date'].isoformat(),
                                 entry_price=current_row_lower['close'],
+                                quantity=qty,
                                 rsi=current_rsi,
                                 rsi_upper=current_rsi_upper,
                                 adx=current_adx,
@@ -699,7 +725,6 @@ class OptionStrategy:
                                 initial_risk=initial_risk
                             )
                             trades_today += 1
-                            current_pos = double_cross_signal
                             current_active_count += 1
 
                     # 3. Pattern entry logic (only if not already entered by RSI or Double Cross)
@@ -708,47 +733,52 @@ class OptionStrategy:
                             for pattern_func in pats:
                                 if pattern_func(candles_lower):
                                     pattern_name = pattern_func.__name__
-                                    signals = get_option_signals(
-                                        category_lower, 
-                                        pattern_name, 
-                                        upper_category, 
-                                        current_position=current_pos,
-                                        rsi_value=current_rsi,
-                                        rsi_upper=current_rsi_upper,
-                                        adx_value=current_adx,
-                                        rsi_config=self.rsi_config,
-                                        adx_config=self.adx_config
-                                    )
                                     
-                                    for signal in signals:
-                                        if signal.action == 'ENTRY':
-                                            if active_trades[signal.option_type] is None:
-                                                initial_risk = self._get_initial_risk(current_atr)
-                                                
-                                                if signal.option_type == 'CALL':
-                                                    sl_price = current_row_lower['close'] - initial_risk if self.sl_enabled else None
-                                                    highest_price_since_entry['CALL'] = current_row_lower['high']
-                                                else:
-                                                    sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
-                                                    lowest_price_since_entry['PUT'] = current_row_lower['low']
+                                    # Check if we already have a position in this direction
+                                    target_opt_type = 'CALL' if category_lower == 'Bullish' else 'PUT' if category_lower == 'Bearish' else None
+                                    if target_opt_type and active_trades[target_opt_type] is None:
+                                        signals = get_option_signals(
+                                            category_lower, 
+                                            pattern_name, 
+                                            upper_category, 
+                                            current_position=None,
+                                            rsi_value=current_rsi,
+                                            rsi_upper=current_rsi_upper,
+                                            adx_value=current_adx,
+                                            rsi_config=self.rsi_config,
+                                            adx_config=self.adx_config
+                                        )
+                                        
+                                        for signal in signals:
+                                            if signal.action == 'ENTRY':
+                                                if active_trades[signal.option_type] is None:
+                                                    initial_risk = self._get_initial_risk(current_atr)
+                                                    
+                                                    if signal.option_type == 'CALL':
+                                                        sl_price = current_row_lower['close'] - initial_risk if self.sl_enabled else None
+                                                        highest_price_since_entry['CALL'] = current_row_lower['high']
+                                                    else:
+                                                        sl_price = current_row_lower['close'] + initial_risk if self.sl_enabled else None
+                                                        lowest_price_since_entry['PUT'] = current_row_lower['low']
 
-                                                active_trades[signal.option_type] = Trade(
-                                                    option_type=signal.option_type,
-                                                    pattern=pattern_name,
-                                                    confirmation=signal.confirmation,
-                                                    entry_time=current_row_lower['date'].isoformat(),
-                                                    entry_price=current_row_lower['close'],
-                                                    rsi=current_rsi,
-                                                    rsi_upper=current_rsi_upper,
-                                                    adx=current_adx,
-                                                    stop_loss=sl_price,
-                                                    initial_risk=initial_risk
-                                                )
-                                                trades_today += 1
-                                                current_pos = signal.option_type
-                                                current_active_count += 1
-                                                if current_active_count >= self.max_concurrent_trades:
-                                                    break
+                                                    qty = self.calculate_quantity(current_row_lower['close'], sl_price) if sl_price else 1
+                                                    active_trades[signal.option_type] = Trade(
+                                                        option_type=signal.option_type,
+                                                        pattern=pattern_name,
+                                                        confirmation=signal.confirmation,
+                                                        entry_time=current_row_lower['date'].isoformat(),
+                                                        entry_price=current_row_lower['close'],
+                                                        quantity=qty,
+                                                        rsi=current_rsi,
+                                                        rsi_upper=current_rsi_upper,
+                                                        adx=current_adx,
+                                                        stop_loss=sl_price,
+                                                        initial_risk=initial_risk
+                                                    )
+                                                    trades_today += 1
+                                                    current_active_count += 1
+                                                    if current_active_count >= self.max_concurrent_trades:
+                                                        break
                                 if current_active_count >= self.max_concurrent_trades:
                                     break
         

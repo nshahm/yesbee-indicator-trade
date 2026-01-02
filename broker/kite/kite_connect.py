@@ -82,8 +82,17 @@ class KiteConnectConfig:
         """Get trading product (MIS/CNC/NRML)."""
         return self.config.get("kite", {}).get("trading", {}).get("product", "MIS")
     
-    def get_exchange(self) -> str:
-        """Get trading exchange."""
+    def get_exchange(self, symbol: Optional[str] = None) -> str:
+        """Get trading exchange.
+        
+        Args:
+            symbol: Optional symbol to get specific exchange for
+        """
+        if symbol:
+            indices = self.config.get("kite", {}).get("instruments", {}).get("indices", {})
+            if symbol in indices:
+                return indices[symbol].get("exchange", "NSE")
+        
         return self.config.get("kite", {}).get("trading", {}).get("exchange", "NSE")
     
     def get_symbols(self) -> List[str]:
@@ -190,14 +199,12 @@ class KiteConnectBroker:
             raise RuntimeError("Not connected to Kite Connect")
         
         try:
-            instruments = self.config.config.get("kite", {}).get("instruments", {}).get("indices", {})
-            tokens = [instruments.get(s, {}).get("token") for s in symbols if s in instruments]
+            instruments_to_fetch = []
+            for s in symbols:
+                exchange = self.config.get_exchange(s)
+                instruments_to_fetch.append(f"{exchange}:{s}")
             
-            if not tokens:
-                logger.warning(f"No valid tokens found for symbols: {symbols}")
-                return {}
-            
-            quotes = self.kite.quote(instruments=[f"NSE:{s}" for s in symbols])
+            quotes = self.kite.quote(instruments=instruments_to_fetch)
             return quotes
             
         except Exception as e:
@@ -214,9 +221,11 @@ class KiteConnectBroker:
             Last traded price or None
         """
         try:
-            quote = self.kite.quote(instruments=[f"NSE:{symbol}"])
-            if quote and f"NSE:{symbol}" in quote:
-                return quote[f"NSE:{symbol}"]["last_price"]
+            exchange = self.config.get_exchange(symbol)
+            instr = f"{exchange}:{symbol}"
+            quote = self.kite.quote(instruments=[instr])
+            if quote and instr in quote:
+                return quote[instr]["last_price"]
         except Exception as e:
             logger.error(f"Error fetching LTP for {symbol}: {e}")
         
@@ -245,7 +254,7 @@ class KiteConnectBroker:
         try:
             kite_order_type = self.config.get("kite", {}).get("trading", {}).get("order_type", "MARKET")
             product = self.config.get_product()
-            exchange = self.config.get_exchange()
+            exchange = self.config.get_exchange(symbol)
             
             order_params = {
                 "exchange": exchange,

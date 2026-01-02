@@ -1,11 +1,11 @@
 kite:
   api:
-    access_token: ksSLDw5EsvHSHx5iKEzBfSQWxVqf444G
+    access_token: 0fX57GO1vhjfPbXTtTzTS7igxLObRs5k
     key: l22cbxdzu3rha76r
     secret: 1p2tjue1yjyjvszlgoywzx0jvs9lt6z2
     user_id: TBZ296
   credentials:
-    auto_refresh_token: true
+    auto_refresh_token: false
     token_refresh_interval_hours: 24
   data_retention:
     max_cache_size_mb: 100
@@ -17,18 +17,69 @@ kite:
         lot_size: 1
         tick_size: 0.05
         token: '260105'
-      FINNIFTY:
+        exchange: NSE
+      SENSEX:
         lot_size: 1
         tick_size: 0.05
-        token: '257801'
+        token: '265'
+        exchange: BSE
       NIFTY50:
         lot_size: 1
         tick_size: 0.05
         token: '256265'
+        exchange: NSE
+      NIFTY_FINANCE:
+        lot_size: 1
+        tick_size: 0.05
+        token: '257801'
+        exchange: NSE
+      NIFTY_IT:
+        lot_size: 1
+        tick_size: 0.05
+        token: '259849'
+        exchange: NSE
+      NIFTY_REALTY:
+        lot_size: 1
+        tick_size: 0.05
+        token: '261129'
+        exchange: NSE
+      NIFTY_INFRA:
+        lot_size: 1
+        tick_size: 0.05
+        token: '261385'
+        exchange: NSE
+      NIFTY_ENERGY:
+        lot_size: 1
+        tick_size: 0.05
+        token: '261641'
+        exchange: NSE
+      NIFTY_FMCG:
+        lot_size: 1
+        tick_size: 0.05
+        token: '261897'
+        exchange: NSE
+      NIFTY_PHARMA:
+        lot_size: 1
+        tick_size: 0.05
+        token: '262409'
+        exchange: NSE
+      NIFTY_AUTO:
+        lot_size: 1
+        tick_size: 0.05
+        token: '263433'
+        exchange: NSE
     symbols:
     - NIFTY50
     - BANKNIFTY
-    - FINNIFTY
+    - SENSEX
+    - NIFTY_FINANCE
+    - NIFTY_IT
+    - NIFTY_REALTY
+    - NIFTY_INFRA
+    - NIFTY_ENERGY
+    - NIFTY_FMCG
+    - NIFTY_PHARMA
+    - NIFTY_AUTO
   logging:
     backup_count: 5
     file: logs/kite_trading.log
@@ -80,3 +131,4 @@ live_trading:
   symbols:
   - NIFTY50
   - BANKNIFTY
+  - SENSEX

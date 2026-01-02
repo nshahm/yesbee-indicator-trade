@@ -31,22 +31,20 @@ logger = logging.getLogger(__name__)
 class BacktestDataDownloader:
     """Download historical data for backtest indices."""
     
-    # Default tokens as fallback
     INDEX_TOKENS = {
         'NIFTY50': '256265',
         'BANKNIFTY': '260105',
-        'FINNIFTY': '257801',
-        'NIFTY_IT': '257801',
-        'NIFTY_BANK': '257864',
-        'NIFTY_FINANCE': '257865',
-        'NIFTY_FMCG': '257870',
-        'NIFTY_AUTO': '257868',
-        'NIFTY_METAL': '257866',
-        'NIFTY_PHARMA': '257872',
-        'NIFTY_REALTY': '257873',
-        'NIFTY_ENERGY': '257869',
-        'NIFTY_INFRA': '257871',
-        'SENSEX': '256355',
+        'NIFTY_FINANCE': '257801',
+        'NIFTY_IT': '259849',
+        'NIFTY_BANK': '260105',
+        'NIFTY_FMCG': '261897',
+        'NIFTY_AUTO': '263433',
+        'NIFTY_METAL': '263689',
+        'NIFTY_PHARMA': '262409',
+        'NIFTY_REALTY': '261129',
+        'NIFTY_ENERGY': '261641',
+        'NIFTY_INFRA': '261385',
+        'SENSEX': '265',
     }
     
     INTERVAL_MAPPING = {

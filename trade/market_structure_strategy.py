@@ -35,6 +35,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
         hl_price = None
         
         has_ll = False
+        has_lh_after_ll = False
         ll_price = None
 
         for i in range(50, len(df_lower)):
@@ -52,6 +53,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 has_hh = False
                 has_lh = False
                 has_ll = False
+                has_lh_after_ll = False
             
             # Update Market Structure
             candles_so_far = self.df_to_candles(df_lower.iloc[:i+1])
@@ -66,9 +68,13 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                     if has_hh:
                         has_lh = True
                         lh_price = ms_result['lh_price']
+                    if has_ll:
+                        has_lh_after_ll = True
+                        lh_price = ms_result['lh_price']
                 
                 if ms_result['is_ll']:
                     has_ll = True
+                    has_lh_after_ll = False # Reset LH when new LL formed
                     ll_price = ms_result['ll_price']
                 
                 if ms_result['is_hl']:
@@ -192,9 +198,8 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                             continue
 
                 # 2. CALL Trade: LL -> LH -> Breakout (Close > LH)
-                if has_ll and ms_result.get('lh_price') is not None:
-                    lh_val = ms_result['lh_price']
-                    if row['close'] > lh_val:
+                if has_ll and has_lh_after_ll and lh_price is not None:
+                    if row['close'] > lh_price:
                         if row['rsi'] > 50 and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
                             active_trade = Trade(
                                 option_type='CALL',
