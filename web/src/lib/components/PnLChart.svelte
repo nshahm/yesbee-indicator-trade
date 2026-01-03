@@ -19,8 +19,8 @@
       <LinearGradient class="from-emerald-500/20 to-transparent" vertical let:gradient>
         <Area line={{ class: 'stroke-emerald-500 stroke-2', curve: curveMonotoneX }} fill={gradient} curve={curveMonotoneX} />
       </LinearGradient>
-      <Axis placement="bottom" grid={{ class: 'stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
-      <Axis placement="left" grid={{ class: 'stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
+      <Axis placement="bottom" grid={{ class: 'stroke-black/5 dark:stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
+      <Axis placement="left" grid={{ class: 'stroke-black/5 dark:stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
     </Svg>
     <Tooltip.Root header={(d) => d?.date?.toLocaleDateString() ?? ''} let:data>
       {#if data}

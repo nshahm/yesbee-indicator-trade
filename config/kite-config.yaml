@@ -69,17 +69,17 @@ kite:
         token: '263433'
         exchange: NSE
     symbols:
-    - NIFTY50
-    - BANKNIFTY
-    - SENSEX
-    - NIFTY_FINANCE
-    - NIFTY_IT
-    - NIFTY_REALTY
-    - NIFTY_INFRA
-    - NIFTY_ENERGY
-    - NIFTY_FMCG
-    - NIFTY_PHARMA
-    - NIFTY_AUTO
+      - NIFTY50
+      - BANKNIFTY
+      - SENSEX
+      - NIFTY_FINANCE
+      - NIFTY_IT
+      - NIFTY_REALTY
+      - NIFTY_INFRA
+      - NIFTY_ENERGY
+      - NIFTY_FMCG
+      - NIFTY_PHARMA
+      - NIFTY_AUTO
   logging:
     backup_count: 5
     file: logs/kite_trading.log
@@ -129,6 +129,6 @@ live_trading:
     max_positions: 5
     signal_cooldown_seconds: 60
   symbols:
-  - NIFTY50
-  - BANKNIFTY
-  - SENSEX
+    - NIFTY50
+    - BANKNIFTY
+    - SENSEX

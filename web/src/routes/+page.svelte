@@ -72,14 +72,14 @@
 
   <!-- Charts -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="h-80 rounded-xl border border-white/5 bg-[#0c0c0e] p-6 flex flex-col">
-      <h3 class="text-sm font-medium text-[#a1a1aa] mb-4">Cumulative P&L</h3>
+    <div class="h-80 rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6 flex flex-col">
+      <h3 class="text-sm font-medium text-[#71717a] dark:text-[#a1a1aa] mb-4">Cumulative P&L</h3>
       <div class="flex-1 min-h-0">
         <PnLChart data={cumulativeData} />
       </div>
     </div>
-    <div class="h-80 rounded-xl border border-white/5 bg-[#0c0c0e] p-6 flex flex-col">
-      <h3 class="text-sm font-medium text-[#a1a1aa] mb-4">Daily P&L</h3>
+    <div class="h-80 rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6 flex flex-col">
+      <h3 class="text-sm font-medium text-[#71717a] dark:text-[#a1a1aa] mb-4">Daily P&L</h3>
       <div class="flex-1 min-h-0">
         <DailyPnLChart data={dailyData} />
       </div>
@@ -87,22 +87,22 @@
   </div>
 
   <!-- Recent Trades -->
-  <div class="rounded-xl border border-white/5 bg-[#0c0c0e] overflow-hidden">
-    <div class="p-6 border-b border-white/5 flex items-center justify-between">
-      <h3 class="text-sm font-medium">Recent Trades</h3>
+  <div class="rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] overflow-hidden">
+    <div class="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-[#18181b] dark:text-white">Recent Trades</h3>
       <div class="relative">
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717a]" size={14} />
         <input 
           type="text" 
           placeholder="Filter trades..." 
-          class="pl-9 pr-4 py-1.5 bg-white/5 border-none rounded-md text-xs focus:ring-1 focus:ring-indigo-500 w-64 placeholder:text-[#52525b]"
+          class="pl-9 pr-4 py-1.5 bg-black/5 dark:bg-white/5 border-none rounded-md text-xs text-[#18181b] dark:text-white focus:ring-1 focus:ring-indigo-500 w-64 placeholder:text-[#a1a1aa] dark:placeholder:text-[#52525b]"
         />
       </div>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
-          <tr class="text-xs font-medium text-[#71717a] border-b border-white/5 uppercase tracking-wider">
+          <tr class="text-xs font-medium text-[#71717a] border-b border-black/5 dark:border-white/5 uppercase tracking-wider">
             <th class="px-6 py-4">Symbol</th>
             <th class="px-6 py-4">Type</th>
             <th class="px-6 py-4">Pattern</th>
@@ -112,18 +112,18 @@
             <th class="px-6 py-4 text-center">Status</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-white/5">
+        <tbody class="divide-y divide-black/5 dark:divide-white/5">
           {#each [...trades].reverse() as trade}
-            <tr class="text-sm hover:bg-white/[0.02] transition-colors group">
-              <td class="px-6 py-4 font-medium text-[#fafafa]">{trade.symbol}</td>
+            <tr class="text-sm hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors group">
+              <td class="px-6 py-4 font-medium text-[#18181b] dark:text-[#fafafa]">{trade.symbol}</td>
               <td class="px-6 py-4">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold {trade.option_type === 'CALL' ? 'text-emerald-400 bg-emerald-400/10' : 'text-orange-400 bg-orange-400/10'}">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold {trade.option_type === 'CALL' ? 'text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-400/10' : 'text-orange-500 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-400/10'}">
                   {trade.option_type}
                 </span>
               </td>
-              <td class="px-6 py-4 text-[#a1a1aa] font-mono text-xs">{trade.pattern}</td>
-              <td class="px-6 py-4 text-[#71717a]">{new Date(trade.entry_time).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-              <td class="px-6 py-4 text-[#a1a1aa]">₹{trade.exit_price.toFixed(2)}</td>
+              <td class="px-6 py-4 text-[#71717a] dark:text-[#a1a1aa] font-mono text-xs capitalize">{trade.pattern.replace('is_', '').replace(/_/g, ' ')}</td>
+              <td class="px-6 py-4 text-[#71717a] dark:text-[#71717a]">{new Date(trade.entry_time).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+              <td class="px-6 py-4 text-[#71717a] dark:text-[#a1a1aa]">₹{trade.exit_price.toFixed(2)}</td>
               <td class="px-6 py-4 text-right font-medium {trade.pnl > 0 ? 'text-emerald-500' : 'text-rose-500'}">
                 {trade.pnl > 0 ? '+' : ''}{trade.pnl.toFixed(2)}
               </td>

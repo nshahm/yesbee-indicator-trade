@@ -15,8 +15,8 @@
     tooltip={{ mode: 'band' }}
   >
     <Svg>
-      <Axis placement="bottom" grid={{ class: 'stroke-white/5' }} class="text-[10px] fill-[#71717a]" />
-      <Axis placement="left" grid={{ class: 'stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
+      <Axis placement="bottom" grid={{ class: 'stroke-black/5 dark:stroke-white/5' }} class="text-[10px] fill-[#71717a]" />
+      <Axis placement="left" grid={{ class: 'stroke-black/5 dark:stroke-white/5' }} ticks={5} class="text-[10px] fill-[#71717a]" />
       <Bars class={(d) => d.value >= 0 ? 'fill-emerald-500/50' : 'fill-rose-500/50'} radius={4} />
     </Svg>
     <Tooltip.Root header={(d) => d?.date ?? ''} let:data>

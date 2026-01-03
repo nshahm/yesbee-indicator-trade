@@ -39,8 +39,8 @@
       {#if data}
         <div class="flex items-center gap-2 p-1">
           <div class="w-2 h-2 rounded-full" style="background-color: {colorScale(data.label)}"></div>
-          <span class="text-xs text-[#71717a] font-medium">{data.label}</span>
-          <span class="text-xs font-semibold">{data.value}</span>
+          <span class="text-xs text-[#71717a] dark:text-[#a1a1aa] font-medium">{data.label}</span>
+          <span class="text-xs font-semibold text-[#18181b] dark:text-white">{data.value}</span>
         </div>
       {/if}
     </Tooltip.Root>

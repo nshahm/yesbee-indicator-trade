@@ -50,10 +50,10 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Symbol Distribution -->
-    <div class="lg:col-span-1 rounded-xl border border-white/5 bg-[#0c0c0e] p-6 flex flex-col">
+    <div class="lg:col-span-1 rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6 flex flex-col">
       <div class="flex items-center gap-2 mb-6">
         <Activity size={16} class="text-indigo-500" />
-        <h3 class="text-sm font-medium">Trade Distribution</h3>
+        <h3 class="text-sm font-medium text-[#09090b] dark:text-white">Trade Distribution</h3>
       </div>
       <div class="flex-1 min-h-[240px]">
         <PieChart data={symbolData} />
@@ -62,26 +62,26 @@
         {#each symbolData as item}
           <div class="flex items-center justify-between text-xs">
             <span class="text-[#71717a]">{item.label}</span>
-            <span class="font-medium">{item.value} trades</span>
+            <span class="font-medium text-[#09090b] dark:text-white">{item.value} trades</span>
           </div>
         {/each}
       </div>
     </div>
 
     <!-- Pattern Analysis -->
-    <div class="lg:col-span-2 rounded-xl border border-white/5 bg-[#0c0c0e] p-6">
+    <div class="lg:col-span-2 rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6">
       <div class="flex items-center gap-2 mb-6">
         <Target size={16} class="text-emerald-500" />
-        <h3 class="text-sm font-medium">Pattern Performance</h3>
+        <h3 class="text-sm font-medium text-[#09090b] dark:text-white">Pattern Performance</h3>
       </div>
       <div class="space-y-4">
         {#each patternPerformance as item}
           <div class="space-y-1.5">
             <div class="flex justify-between text-xs">
-              <span class="text-[#a1a1aa] capitalize">{item.pattern}</span>
-              <span class="font-medium">{item.winRate}% Win Rate ({item.total} trades)</span>
+              <span class="text-[#71717a] dark:text-[#a1a1aa] capitalize">{item.pattern}</span>
+              <span class="font-medium text-[#09090b] dark:text-white">{item.winRate}% Win Rate ({item.total} trades)</span>
             </div>
-            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+            <div class="h-1.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
               <div 
                 class="h-full bg-indigo-500 rounded-full transition-all duration-500" 
                 style="width: {item.winRate}%"
@@ -95,35 +95,35 @@
 
   <!-- Detailed Metrics Grid -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <div class="rounded-xl border border-white/5 bg-[#0c0c0e] p-6">
+    <div class="rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6">
       <div class="flex items-center gap-2 mb-4">
         <Shield size={16} class="text-orange-500" />
-        <h3 class="text-sm font-medium">Risk Metrics</h3>
+        <h3 class="text-sm font-medium text-[#09090b] dark:text-white">Risk Metrics</h3>
       </div>
       <div class="grid grid-cols-2 gap-4">
-        <div class="p-4 rounded-lg bg-white/[0.02] border border-white/5">
+        <div class="p-4 rounded-lg bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5">
           <span class="text-[10px] text-[#71717a] uppercase font-bold">Max Drawdown</span>
           <p class="text-lg font-semibold text-rose-500 mt-1">-₹1,500.00</p>
         </div>
-        <div class="p-4 rounded-lg bg-white/[0.02] border border-white/5">
+        <div class="p-4 rounded-lg bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5">
           <span class="text-[10px] text-[#71717a] uppercase font-bold">Sharpe Ratio</span>
           <p class="text-lg font-semibold text-emerald-500 mt-1">1.84</p>
         </div>
       </div>
     </div>
-    <div class="rounded-xl border border-white/5 bg-[#0c0c0e] p-6">
+    <div class="rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0e] p-6">
       <div class="flex items-center gap-2 mb-4">
         <Zap size={16} class="text-yellow-500" />
-        <h3 class="text-sm font-medium">System Efficiency</h3>
+        <h3 class="text-sm font-medium text-[#09090b] dark:text-white">System Efficiency</h3>
       </div>
       <div class="grid grid-cols-2 gap-4">
-        <div class="p-4 rounded-lg bg-white/[0.02] border border-white/5">
+        <div class="p-4 rounded-lg bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5">
           <span class="text-[10px] text-[#71717a] uppercase font-bold">Avg Duration</span>
-          <p class="text-lg font-semibold mt-1">52m</p>
+          <p class="text-lg font-semibold text-[#09090b] dark:text-white mt-1">52m</p>
         </div>
-        <div class="p-4 rounded-lg bg-white/[0.02] border border-white/5">
+        <div class="p-4 rounded-lg bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5">
           <span class="text-[10px] text-[#71717a] uppercase font-bold">Recovery Factor</span>
-          <p class="text-lg font-semibold mt-1">2.4</p>
+          <p class="text-lg font-semibold text-[#09090b] dark:text-white mt-1">2.4</p>
         </div>
       </div>
     </div>
