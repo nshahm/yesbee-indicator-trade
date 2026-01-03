@@ -33,7 +33,12 @@ class KiteConnectConfig:
             "KITE_CONFIG_PATH",
             "config/kite-config.yaml"
         ))
+        self.options_path = Path(os.getenv(
+            "OPTIONS_CONFIG_PATH",
+            "config/options.yaml"
+        ))
         self.config = self._load_config()
+        self.options = self._load_options()
     
     def _load_config(self) -> dict:
         """Load and parse configuration file."""
@@ -44,6 +49,19 @@ class KiteConnectConfig:
             config = yaml.safe_load(f)
         
         return config
+
+    def _load_options(self) -> dict:
+        """Load and parse options configuration file."""
+        if not self.options_path.exists():
+            logger.warning(f"Options config not found: {self.options_path}")
+            return {}
+        
+        try:
+            with open(self.options_path) as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Error loading options config: {e}")
+            return {}
     
     def _resolve_env_var(self, value: str) -> str:
         """Resolve environment variables in config values.
@@ -96,12 +114,26 @@ class KiteConnectConfig:
         return self.config.get("kite", {}).get("trading", {}).get("exchange", "NSE")
     
     def get_symbols(self) -> List[str]:
-        """Get trading symbols."""
-        return self.config.get("kite", {}).get("instruments", {}).get("symbols", [])
+        """Get trading symbols, filtered by enabled status in options.yaml."""
+        config_symbols = self.config.get("kite", {}).get("instruments", {}).get("symbols", [])
+        indices_config = self.options.get("indices", {})
+        
+        enabled_symbols = []
+        for s in config_symbols:
+            # Check if index is enabled in options.yaml
+            index_cfg = indices_config.get(s.lower(), {})
+            if index_cfg.get("enabled", False):
+                enabled_symbols.append(s)
+                
+        return enabled_symbols
     
     def get_instrument_token(self, symbol: str) -> Optional[str]:
         """Get instrument token for symbol."""
         indices = self.config.get("kite", {}).get("instruments", {}).get("indices", {})
+        # Only return token if index is enabled
+        indices_config = self.options.get("indices", {})
+        if not indices_config.get(symbol.lower(), {}).get("enabled", False):
+            return None
         return indices.get(symbol, {}).get("token")
     
     def get_lot_size(self, symbol: str) -> int:
@@ -114,8 +146,17 @@ class KiteConnectConfig:
         return self.config.get("live_trading", {}).get("enabled", False)
     
     def get_live_trading_symbols(self) -> List[str]:
-        """Get symbols for live trading."""
-        return self.config.get("live_trading", {}).get("symbols", [])
+        """Get symbols for live trading, filtered by enabled status in options.yaml."""
+        config_symbols = self.config.get("live_trading", {}).get("symbols", [])
+        indices_config = self.options.get("indices", {})
+        
+        enabled_symbols = []
+        for s in config_symbols:
+            index_cfg = indices_config.get(s.lower(), {})
+            if index_cfg.get("enabled", False):
+                enabled_symbols.append(s)
+                
+        return enabled_symbols
     
     def get_max_positions(self) -> int:
         """Get maximum open positions."""

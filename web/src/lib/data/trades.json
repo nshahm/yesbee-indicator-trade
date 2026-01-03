@@ -1,0 +1,86 @@
+[
+  {
+    "symbol": "NIFTY50",
+    "option_type": "CALL",
+    "pattern": "is_hammer",
+    "confirmation": "Single",
+    "entry_time": "2025-12-01T09:30:00",
+    "exit_time": "2025-12-01T10:15:00",
+    "entry_price": 150.50,
+    "exit_price": 185.20,
+    "quantity": 50,
+    "pnl": 1735.0
+  },
+  {
+    "symbol": "BANKNIFTY",
+    "option_type": "PUT",
+    "pattern": "is_bearish_engulfing",
+    "confirmation": "Double",
+    "entry_time": "2025-12-01T13:45:00",
+    "exit_time": "2025-12-01T14:30:00",
+    "entry_price": 320.10,
+    "exit_price": 280.50,
+    "quantity": 15,
+    "pnl": 594.0
+  },
+  {
+    "symbol": "NIFTY50",
+    "option_type": "CALL",
+    "pattern": "is_bullish_engulfing",
+    "confirmation": "Double",
+    "entry_time": "2025-12-02T10:00:00",
+    "exit_time": "2025-12-02T11:30:00",
+    "entry_price": 165.00,
+    "exit_price": 145.00,
+    "quantity": 50,
+    "pnl": -1000.0
+  },
+  {
+    "symbol": "SENSEX",
+    "option_type": "CALL",
+    "pattern": "is_morning_star",
+    "confirmation": "Triple",
+    "entry_time": "2025-12-03T11:15:00",
+    "exit_time": "2025-12-03T12:45:00",
+    "entry_price": 450.00,
+    "exit_price": 520.00,
+    "quantity": 10,
+    "pnl": 700.0
+  },
+  {
+    "symbol": "NIFTY50",
+    "option_type": "PUT",
+    "pattern": "is_shooting_star",
+    "confirmation": "Single",
+    "entry_time": "2025-12-04T09:45:00",
+    "exit_time": "2025-12-04T10:30:00",
+    "entry_price": 180.00,
+    "exit_price": 210.00,
+    "quantity": 50,
+    "pnl": -1500.0
+  },
+  {
+    "symbol": "BANKNIFTY",
+    "option_type": "CALL",
+    "pattern": "is_bullish_kicker",
+    "confirmation": "Double",
+    "entry_time": "2025-12-04T14:00:00",
+    "exit_time": "2025-12-04T15:00:00",
+    "entry_price": 350.00,
+    "exit_price": 420.00,
+    "quantity": 15,
+    "pnl": 1050.0
+  },
+  {
+    "symbol": "NIFTY50",
+    "option_type": "CALL",
+    "pattern": "is_hammer",
+    "confirmation": "Single",
+    "entry_time": "2025-12-05T09:30:00",
+    "exit_time": "2025-12-05T10:30:00",
+    "entry_price": 140.00,
+    "exit_price": 175.00,
+    "quantity": 50,
+    "pnl": 1750.0
+  }
+]
