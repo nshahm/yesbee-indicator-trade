@@ -1,6 +1,6 @@
 indices:
   nifty50:
-    enabled: true
+    enabled: false
     symbol: "NIFTY50"
     description: "Nifty 50 Index"
     max_concurrent_trades: 1
@@ -32,14 +32,14 @@ indices:
         candle_trailing:
           enabled: false
         step_trailing:
-          enabled: true
+          enabled: false
           levels:
             - { profit_r: 0.8, lock_r: 0.0 }
             - { profit_r: 1.5, lock_r: 0.5 }
             - { profit_r: 2.5, lock_r: 1.5 }
 
   banknifty:
-    enabled: true
+    enabled: false
     symbol: "BANKNIFTY"
     description: "Bank Nifty Index"
     max_concurrent_trades: 1
@@ -101,7 +101,7 @@ indices:
         candle_trailing:
           enabled: false
         step_trailing:
-          enabled: true
+          enabled: false
           levels:
             - { profit_r: 0.8, lock_r: 0.0 }
             - { profit_r: 1.5, lock_r: 0.5 }
@@ -433,7 +433,7 @@ indicators:
     sl_multiplier: 1.5
     trail_multiplier: 1.2
   macd:
-    enabled: true
+    enabled: false
     fast: 12
     slow: 26
     signal: 9

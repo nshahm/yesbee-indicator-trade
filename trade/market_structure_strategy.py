@@ -176,16 +176,21 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 # 1. PUT Trade: HH -> LH -> Breakdown (Close < HL)
                 if has_hh and has_lh and hl_price is not None:
                     if row['close'] < hl_price:
-                        # Extra conditions from hhll.md
-                        if row['rsi'] < 50 and row['close'] < row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
+                        # MTF RSI Confirmation
+                        rsi_upper = last_upper.get('rsi')
+                        neutral_rsi = self.options.get('indicators', {}).get('rsi', {}).get('neutral_threshold', 50)
+                        rsi_ok = row['rsi'] <= self.rsi_put_threshold
+                        htf_rsi_ok = rsi_upper <= neutral_rsi if rsi_upper is not None else True
+                        
+                        if rsi_ok and htf_rsi_ok and row['close'] < row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
                             active_trade = Trade(
                                 option_type='PUT',
                                 pattern='HH-LH-Breakdown',
-                                confirmation='RSI < 50',
+                                confirmation='RSI+MTF',
                                 entry_time=current_time.isoformat(),
                                 entry_price=row['close'],
                                 rsi=row['rsi'],
-                                rsi_upper=last_upper['rsi'],
+                                rsi_upper=rsi_upper,
                                 adx=adx_value,
                                 stop_loss=lh_price + (row['atr'] * 0.3) if lh_price else None,
                                 initial_risk=self._get_initial_risk(row['atr'])
@@ -200,15 +205,21 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 # 2. CALL Trade: LL -> LH -> Breakout (Close > LH)
                 if has_ll and has_lh_after_ll and lh_price is not None:
                     if row['close'] > lh_price:
-                        if row['rsi'] > 50 and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
+                        # MTF RSI Confirmation
+                        rsi_upper = last_upper.get('rsi')
+                        neutral_rsi = self.options.get('indicators', {}).get('rsi', {}).get('neutral_threshold', 50)
+                        rsi_ok = row['rsi'] >= self.rsi_call_threshold
+                        htf_rsi_ok = rsi_upper >= neutral_rsi if rsi_upper is not None else True
+
+                        if rsi_ok and htf_rsi_ok and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
                             active_trade = Trade(
                                 option_type='CALL',
                                 pattern='LL-LH-Breakout',
-                                confirmation='RSI > 50',
+                                confirmation='RSI+MTF',
                                 entry_time=current_time.isoformat(),
                                 entry_price=row['close'],
                                 rsi=row['rsi'],
-                                rsi_upper=last_upper['rsi'],
+                                rsi_upper=rsi_upper,
                                 adx=adx_value,
                                 stop_loss=ll_price - (row['atr'] * 0.3) if ll_price else None,
                                 initial_risk=self._get_initial_risk(row['atr'])

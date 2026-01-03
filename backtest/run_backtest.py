@@ -43,9 +43,8 @@ def load_data(file_path: Path) -> pd.DataFrame:
     return df
 
 def calculate_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    rsi = df.ta.rsi(length=period)
-    if isinstance(rsi, pd.DataFrame):
-        return rsi.iloc[:, 0]
+    # Ensure we use the close column for RSI calculation
+    rsi = ta.rsi(df['close'], length=period)
     return rsi
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -170,6 +169,15 @@ def run_strategy_for_week(strategy_name: str, options: Dict, symbol: str, df_low
     for t in trades:
         try:
             entry_dt = pd.to_datetime(t.entry_time)
+            
+            # Ensure everything is Timestamp for comparison
+            if not isinstance(week_start, pd.Timestamp):
+                week_start = pd.to_datetime(week_start)
+            if not isinstance(week_end, pd.Timestamp):
+                week_end = pd.to_datetime(week_end)
+            if not isinstance(entry_dt, pd.Timestamp):
+                entry_dt = pd.to_datetime(entry_dt)
+
             # Ensure entry_dt is timezone-aware if week_start is
             if week_start.tzinfo and not entry_dt.tzinfo:
                 entry_dt = entry_dt.tz_localize(week_start.tzinfo)
@@ -321,8 +329,9 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
             context_start = max(0, start_idx - CONTEXT_SIZE)
             df_week_with_context = df_lower_reset.iloc[context_start : end_idx + 1].copy()
             
-            week_start = group['date'].min()
-            week_end = group['date'].max()
+            # Ensure week boundaries are Timestamps
+            week_start = pd.to_datetime(group['date'].min())
+            week_end = pd.to_datetime(group['date'].max())
             
             futures.append(executor.submit(
                 run_strategy_for_week, 
@@ -527,9 +536,14 @@ def process_symbol(symbol, backtest_config, options, indices_config, args):
 
     # Reset index to match run_backtest_wrapper expectations if needed
     if 'date' not in df_lower.columns:
-        df_lower = df_lower.reset_index()
+        df_lower = df_lower.reset_index(drop=False)
+    else:
+        df_lower = df_lower.reset_index(drop=True).set_index('date', drop=False)
+        
     if 'date' not in df_upper.columns:
-        df_upper = df_upper.reset_index()
+        df_upper = df_upper.reset_index(drop=False)
+    else:
+        df_upper = df_upper.reset_index(drop=True).set_index('date', drop=False)
 
     return run_backtest_wrapper(df_lower, df_upper, symbol, lower_interval, upper_interval, options, args.strategy, from_date, to_date)
 

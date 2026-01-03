@@ -318,6 +318,12 @@ class OptionStrategy:
             previous_rsi = prev_row_lower.get('rsi') if prev_row_lower is not None else None
             current_time = current_row_lower['date']
             
+            window_df_upper = get_last_upper_window(current_time)
+            if len(window_df_upper) < 5:
+                continue
+            current_rsi_upper = window_df_upper.iloc[-1].get('rsi')
+            upper_category = get_pattern_category(window_df_upper, self.patterns)
+
             # Double Cross Indicators
             f, s, sig = self.macd_config.get('fast', 12), self.macd_config.get('slow', 26), self.macd_config.get('signal', 9)
             k, d, sk = self.stoch_config.get('k', 14), self.stoch_config.get('d', 3), self.stoch_config.get('smooth_k', 3)
@@ -335,11 +341,12 @@ class OptionStrategy:
             prev_stoch_k = prev_row_lower.get(stoch_k_col) if prev_row_lower is not None else None
             prev_stoch_d = prev_row_lower.get(stoch_d_col) if prev_row_lower is not None else None
             
-            # Double Cross Signal Logic
+            # Double Cross Signal Logic with MTF RSI Confirmation
             double_cross_signal = None
             if self.macd_config.get('enabled', True) and self.stoch_config.get('enabled', True):
                 oversold = self.stoch_config.get('oversold', 20)
                 overbought = self.stoch_config.get('overbought', 80)
+                neutral_rsi = self.rsi_config.get('neutral_threshold', 50)
                 
                 if prev_stoch_k is not None and prev_stoch_d is not None and \
                    curr_stoch_k is not None and curr_stoch_d is not None and curr_macd_h is not None:
@@ -347,12 +354,14 @@ class OptionStrategy:
                     # Bullish Cross: %K crosses above %D below oversold level AND MACD Histogram > 0
                     if prev_stoch_k < prev_stoch_d and curr_stoch_k > curr_stoch_d and \
                        curr_stoch_k < oversold and curr_macd_h > 0:
-                        double_cross_signal = 'CALL'
+                        if current_rsi_upper is not None and current_rsi_upper >= neutral_rsi:
+                            double_cross_signal = 'CALL'
                     
                     # Bearish Cross: %K crosses below %D above overbought level AND MACD Histogram < 0
                     elif prev_stoch_k > prev_stoch_d and curr_stoch_k < curr_stoch_d and \
                          curr_stoch_k > overbought and curr_macd_h < 0:
-                        double_cross_signal = 'PUT'
+                        if current_rsi_upper is not None and current_rsi_upper <= neutral_rsi:
+                            double_cross_signal = 'PUT'
 
             # Daily Reset for Risk Management
             trade_date = current_time.date()
@@ -382,24 +391,21 @@ class OptionStrategy:
             if pd.isna(current_rsi) or pd.isna(previous_rsi):
                 continue
             
-            # RSI Trend Signal
+            # RSI Trend Signal with MTF Confirmation
             rsi_trend_signal = None
             call_thresh = self.rsi_config.get('call_threshold', 60)
             call_upper_thresh = self.rsi_config.get('call_upper_threshold', 80)
             put_thresh = self.rsi_config.get('put_threshold', 40)
             put_lower_thresh = self.rsi_config.get('put_lower_threshold', 20)
+            neutral_rsi = self.rsi_config.get('neutral_threshold', 50)
             
             if current_rsi > previous_rsi and call_thresh <= current_rsi <= call_upper_thresh:
-                rsi_trend_signal = 'CALL'
+                if current_rsi_upper is not None and current_rsi_upper >= neutral_rsi:
+                    rsi_trend_signal = 'CALL'
             elif current_rsi < previous_rsi and put_lower_thresh <= current_rsi <= put_thresh:
-                rsi_trend_signal = 'PUT'
+                if current_rsi_upper is not None and current_rsi_upper <= neutral_rsi:
+                    rsi_trend_signal = 'PUT'
             
-            window_df_upper = get_last_upper_window(current_time)
-            if len(window_df_upper) < 5:
-                continue
-                
-            upper_category = get_pattern_category(window_df_upper, self.patterns)
-            current_rsi_upper = window_df_upper.iloc[-1].get('rsi')
             candles_lower = df_to_candles(window_df_lower)
 
             # Handle EXITS
