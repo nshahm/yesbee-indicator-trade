@@ -64,6 +64,7 @@ class TrendMomentumStrategy:
         
         adx_config = indicator_config.get('adx', {})
         self.adx_enabled = adx_config.get('enabled', True)
+        self.dx_enabled = adx_config.get('dx_enabled', True)
         self.adx_threshold = adx_config.get('threshold', 18)
         
         ema_config = indicator_config.get('ema', {})
@@ -79,6 +80,8 @@ class TrendMomentumStrategy:
         else: # swing
             self.sl_multiplier = atr_config.get('sl_multiplier', 2.0)
             self.trail_multiplier = atr_config.get('trail_multiplier', 1.5)
+        
+        self.candlestick_enabled = options.get('patterns', {}).get('enabled', True)
 
     def _get_initial_risk(self, current_atr: float) -> float:
         risks = []
@@ -124,9 +127,10 @@ class TrendMomentumStrategy:
         # Basic bullish candle
         is_bullish_candle = last_candle.close > last_candle.open
         
-        # Check specific patterns
-        if is_bullish_engulfing(candles) or is_hammer(candles):
-            return True
+        if self.candlestick_enabled:
+            # Check specific patterns
+            if is_bullish_engulfing(candles) or is_hammer(candles):
+                return True
             
         return is_bullish_candle
 
@@ -137,9 +141,10 @@ class TrendMomentumStrategy:
         last_candle = candles[-1]
         is_bearish_candle = last_candle.close < last_candle.open
         
-        from candlestick import is_bearish_engulfing, is_shooting_star
-        if is_bearish_engulfing(candles) or is_shooting_star(candles):
-            return True
+        if self.candlestick_enabled:
+            from candlestick import is_bearish_engulfing, is_shooting_star
+            if is_bearish_engulfing(candles) or is_shooting_star(candles):
+                return True
             
         return is_bearish_candle
 
@@ -316,13 +321,16 @@ class TrendMomentumStrategy:
                 
                 # 1. LONG Entry Conditions
                 adx_value = row.get('ADX', 0)
+                dmp_value = row.get('DMP', 0)
+                dmn_value = row.get('DMN', 0)
                 adx_ok = adx_value > self.adx_threshold if self.adx_enabled else True
+                dx_ok_call = dmp_value > dmn_value if self.adx_enabled and self.dx_enabled else True
                 
                 trend_long_ok = (
                     row['close'] > row[f'ema{self.medium_ema}'] and 
                     row[f'ema{self.short_ema}'] > row[f'ema{self.medium_ema}'] and 
                     (np.isnan(ema_long_lower) or row['close'] > ema_long_lower) and
-                    adx_ok
+                    adx_ok and dx_ok_call
                 )
                 rsi_long_ok = (
                     self.rsi_call_threshold < row['rsi'] < self.rsi_call_upper_threshold and 
@@ -335,11 +343,12 @@ class TrendMomentumStrategy:
                 )
                 
                 # 2. SHORT Entry Conditions (Optional as per system.md)
+                dx_ok_put = dmn_value > dmp_value if self.adx_enabled and self.dx_enabled else True
                 trend_short_ok = (
                     row['close'] < row[f'ema{self.medium_ema}'] and 
                     row[f'ema{self.short_ema}'] < row[f'ema{self.medium_ema}'] and 
                     (np.isnan(ema_long_lower) or row['close'] < ema_long_lower) and
-                    adx_ok
+                    adx_ok and dx_ok_put
                 )
                 rsi_short_ok = (
                     self.rsi_put_lower_threshold < row['rsi'] < self.rsi_put_threshold and 

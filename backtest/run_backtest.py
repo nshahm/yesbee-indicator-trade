@@ -63,6 +63,12 @@ def calculate_stochastic(df: pd.DataFrame, k: int = 14, d: int = 3, smooth_k: in
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     adx = df.ta.adx(high=df['high'], low=df['low'], close=df['close'], length=period)
+    if adx is not None:
+        # Rename columns to standard names
+        if len(adx.columns) == 3:
+            adx.columns = ['ADX', 'DMP', 'DMN']
+        elif len(adx.columns) == 4:
+            adx.columns = ['ADX', 'ADXR', 'DMP', 'DMN']
     return adx
 
 def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: str, upper_interval: str):
@@ -70,6 +76,7 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
     table = Table(title=f"📈 Trade Summary: {symbol} ({lower_interval}/{upper_interval})")
     
     table.add_column("Type", style="cyan")
+    table.add_column("Pattern", style="yellow")
     table.add_column("Entry Time", style="green", min_width=16)
     table.add_column("Exit Time", style="red", min_width=16)
     table.add_column("Qty", justify="right", style="magenta")
@@ -126,6 +133,7 @@ def display_summary(completed_trades: List[Trade], symbol: str, lower_interval: 
 
         table.add_row(
             t.option_type,
+            getattr(t, 'pattern', 'N/A'),
             e_t,
             x_t,
             str(getattr(t, 'quantity', 'N/A')),
@@ -280,10 +288,6 @@ def run_backtest_wrapper(df_lower: pd.DataFrame, df_upper: pd.DataFrame, symbol:
     adx_period = options.get('indicators', {}).get('adx', {}).get('period', 14)
     adx_df = calculate_adx(df_lower, period=adx_period)
     if adx_df is not None:
-        # Rename ADX columns to standard names
-        adx_col = f"ADX_{adx_period}"
-        if adx_col in adx_df.columns:
-            adx_df = adx_df.rename(columns={adx_col: "ADX"})
         df_lower = pd.concat([df_lower, adx_df], axis=1)
     
     with print_lock:
@@ -380,6 +384,7 @@ def display_combined_summary(all_trades: List[Trade]):
     
     table.add_column("Symbol", style="cyan", min_width=10)
     table.add_column("Type", style="cyan")
+    table.add_column("Pattern", style="yellow")
     table.add_column("Entry Time", style="green", min_width=16)
     table.add_column("Exit Time", style="red", min_width=16)
     table.add_column("Qty", justify="right", style="magenta")
@@ -438,6 +443,7 @@ def display_combined_summary(all_trades: List[Trade]):
         table.add_row(
             getattr(t, 'symbol', 'N/A'),
             t.option_type,
+            getattr(t, 'pattern', 'N/A'),
             e_t,
             x_t,
             str(getattr(t, 'quantity', 'N/A')),

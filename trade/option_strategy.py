@@ -7,6 +7,8 @@ from candlestick import Candle
 from candlestick.bullish import __all__ as bullish_patterns
 from candlestick.bearish import __all__ as bearish_patterns
 from candlestick.neutral import __all__ as neutral_patterns
+from indicators import MarketStructure
+from candlestick.neutral.doji import is_doji
 
 @dataclass
 class Trade:
@@ -117,6 +119,8 @@ def get_option_signals(
     rsi_value: Optional[float] = None,
     rsi_upper: Optional[float] = None,
     adx_value: Optional[float] = None,
+    dmp_value: Optional[float] = None,
+    dmn_value: Optional[float] = None,
     rsi_config: Optional[Dict] = None,
     adx_config: Optional[Dict] = None,
     df: Optional[pd.DataFrame] = None,
@@ -134,6 +138,10 @@ def get_option_signals(
             rsi_value = df.iloc[index]['rsi']
         if adx_value is None and 'ADX' in df.columns:
             adx_value = df.iloc[index]['ADX']
+        if dmp_value is None and 'DMP' in df.columns:
+            dmp_value = df.iloc[index]['DMP']
+        if dmn_value is None and 'DMN' in df.columns:
+            dmn_value = df.iloc[index]['DMN']
     
     confirmation = PATTERN_CONFIRMATIONS.get(pattern_name, "N/A")
     
@@ -143,10 +151,16 @@ def get_option_signals(
         rsi_call_ok = True
         rsi_put_ok = True
         adx_ok = True
+        dx_ok_call = True
+        dx_ok_put = True
         
         if adx_config and adx_config.get('enabled', True):
             adx_thresh = adx_config.get('threshold', 18)
             adx_ok = adx_value > adx_thresh if adx_value is not None else False
+            
+            if adx_config.get('dx_enabled', True):
+                dx_ok_call = dmp_value > dmn_value if dmp_value is not None and dmn_value is not None else False
+                dx_ok_put = dmn_value > dmp_value if dmp_value is not None and dmn_value is not None else False
 
         if rsi_config:
             call_thresh = rsi_config.get('call_threshold')
@@ -177,10 +191,10 @@ def get_option_signals(
         # STRICT MTF: Only enter if upper timeframe confirms trend
         if upper_category:
             if category == 'Bullish' and upper_category == 'Bullish':
-                if rsi_call_ok and adx_ok:
+                if rsi_call_ok and adx_ok and dx_ok_call:
                     signals.append(OptionSignal('ENTRY', 'CALL', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
             elif category == 'Bearish' and upper_category == 'Bearish':
-                if rsi_put_ok and adx_ok:
+                if rsi_put_ok and adx_ok and dx_ok_put:
                     signals.append(OptionSignal('ENTRY', 'PUT', pattern_name, rsi_value, rsi_upper, adx_value, confirmation))
         # No entry if upper_category is not available (Strict MTF)
             
@@ -221,11 +235,13 @@ class OptionStrategy:
         self.rsi_config = options.get('indicators', {}).get('rsi', {})
         self.adx_config = options.get('indicators', {}).get('adx', {})
         self.adx_enabled = self.adx_config.get('enabled', True)
+        self.dx_enabled = self.adx_config.get('dx_enabled', True)
         self.adx_threshold = self.adx_config.get('threshold', 18)
         self.atr_config = options.get('indicators', {}).get('atr', {})
         self.macd_config = options.get('indicators', {}).get('macd', {})
         self.stoch_config = options.get('indicators', {}).get('stochastic', {})
         self.pattern_config = options.get('patterns', {})
+        self.candlestick_enabled = self.pattern_config.get('enabled', True)
         self.trading_hours = options.get('trading_hours', {})
         index_config = options.get('indices', {}).get(symbol.lower(), {})
         self.max_concurrent_trades = index_config.get('max_concurrent_trades', 1)
@@ -242,6 +258,10 @@ class OptionStrategy:
         self.atr_sl_config = self.sl_config.get('atr', {})
         self.fixed_sl_config = self.sl_config.get('fixed', {})
         self.trailing_enabled = self.trailing_config.get('enabled', True)
+        
+        # Trend Reversal Exit Configuration
+        self.trend_reversal_exit = options.get('indicators', {}).get('trend_reversal_exit', {})
+        self.ms = MarketStructure(n=options.get('market_structure', {}).get('n', 2))
         
         # New: Fixed quantity support
         self.quantity = self.risk_management.get('quantity', 1)
@@ -276,6 +296,9 @@ class OptionStrategy:
         return min(r for r in risks if r > 0) or 0
         
     def _get_enabled_patterns(self) -> Dict:
+        if not self.candlestick_enabled:
+            return {'Bullish': [], 'Bearish': [], 'Neutral': []}
+            
         def is_enabled(p_name, category):
             cat_config = self.pattern_config.get(category.lower(), {})
             return cat_config.get(p_name, False)
@@ -302,6 +325,10 @@ class OptionStrategy:
         current_day = None
         
         df_upper_indexed = df_upper.set_index('date')
+        
+        # Reset Market Structure
+        self.ms = MarketStructure(n=self.options.get('market_structure', {}).get('n', 2))
+        has_hh, has_lh, has_ll, has_hl = False, False, False, False
 
         def get_last_upper_window(lower_date: datetime) -> pd.DataFrame:
             relevant_upper = df_upper_indexed[df_upper_indexed.index <= lower_date]
@@ -315,6 +342,8 @@ class OptionStrategy:
             current_rsi = current_row_lower.get('rsi')
             current_atr = current_row_lower.get('atr')
             current_adx = current_row_lower.get('ADX')
+            current_dmp = current_row_lower.get('DMP')
+            current_dmn = current_row_lower.get('DMN')
             previous_rsi = prev_row_lower.get('rsi') if prev_row_lower is not None else None
             current_time = current_row_lower['date']
             
@@ -369,6 +398,7 @@ class OptionStrategy:
                 current_day = trade_date
                 trades_today = 0
                 consecutive_losses_today = 0
+                has_hh, has_lh, has_ll, has_hl = False, False, False, False
             
             # Trading Hours Check
             is_within_hours = True
@@ -391,6 +421,20 @@ class OptionStrategy:
             if pd.isna(current_rsi) or pd.isna(previous_rsi):
                 continue
             
+            # Update Market Structure
+            candles_all = df_to_candles(df_lower.iloc[:i])
+            ms_result = self.ms.update(candles_all)
+            if ms_result:
+                if ms_result['is_hh']:
+                    has_hh, has_lh = True, False
+                elif ms_result['is_lh']:
+                    if has_hh: has_lh = True
+                
+                if ms_result['is_ll']:
+                    has_ll, has_hl = True, False
+                elif ms_result['is_hl']:
+                    if has_ll: has_hl = True
+
             # RSI Trend Signal with MTF Confirmation
             rsi_trend_signal = None
             call_thresh = self.rsi_config.get('call_threshold', 60)
@@ -516,6 +560,15 @@ class OptionStrategy:
                                 is_exit_triggered = True
                                 exit_price = trade.stop_loss
 
+                    # Trend Reversal Exit (Doji + HH/LH for PUT, Doji + LL/HL for CALL)
+                    if not is_exit_triggered and self.trend_reversal_exit.get('enabled', True):
+                        if opt_type == 'PUT' and has_hh and has_lh and is_doji(candles_lower):
+                            is_exit_triggered = True
+                            exit_price = current_row_lower['close']
+                        elif opt_type == 'CALL' and has_ll and has_hl and is_doji(candles_lower):
+                            is_exit_triggered = True
+                            exit_price = current_row_lower['close']
+
                     # Force Session Exit (if SL not hit)
                     if not is_exit_triggered and force_session_exit:
                         is_exit_triggered = True
@@ -593,6 +646,8 @@ class OptionStrategy:
                                     rsi_value=current_rsi,
                                     rsi_upper=current_rsi_upper,
                                     adx_value=current_adx,
+                                    dmp_value=current_dmp,
+                                    dmn_value=current_dmn,
                                     rsi_config=self.rsi_config,
                                     adx_config=self.adx_config,
                                     df=df_lower,
@@ -631,6 +686,8 @@ class OptionStrategy:
                             rsi_value=current_rsi,
                             rsi_upper=current_rsi_upper,
                             adx_value=current_adx,
+                            dmp_value=current_dmp,
+                            dmn_value=current_dmn,
                             rsi_config=self.rsi_config,
                             adx_config=self.adx_config
                         )
@@ -670,13 +727,28 @@ class OptionStrategy:
             if can_enter:
                 # ADX Trend Strength Filter
                 adx_ok = True
+                dx_ok_call = True
+                dx_ok_put = True
                 if self.adx_enabled:
                     adx_ok = current_adx > self.adx_threshold if current_adx is not None else False
+                    if self.dx_enabled:
+                        dx_ok_call = current_dmp > current_dmn if current_dmp is not None and current_dmn is not None else False
+                        dx_ok_put = current_dmn > current_dmp if current_dmp is not None and current_dmn is not None else False
 
                 current_active_count = sum(1 for t in active_trades.values() if t is not None)
                 
+                # Candle Color Confirmation
+                is_bullish_candle = current_row_lower['close'] > current_row_lower['open']
+                is_bearish_candle = current_row_lower['close'] < current_row_lower['open']
+
                 # 1. Entry based on RSI Trend
-                if current_active_count < self.max_concurrent_trades and rsi_trend_signal and adx_ok:
+                rsi_trend_ok = False
+                if rsi_trend_signal == 'CALL':
+                    rsi_trend_ok = adx_ok and dx_ok_call and is_bullish_candle
+                elif rsi_trend_signal == 'PUT':
+                    rsi_trend_ok = adx_ok and dx_ok_put and is_bearish_candle
+
+                if current_active_count < self.max_concurrent_trades and rsi_trend_signal and rsi_trend_ok:
                     if active_trades[rsi_trend_signal] is None:
                         initial_risk = self._get_initial_risk(current_atr)
                         
@@ -705,7 +777,13 @@ class OptionStrategy:
                         current_active_count += 1
 
                     # 2. Entry based on Double Cross
-                    if current_active_count < self.max_concurrent_trades and double_cross_signal and adx_ok:
+                    double_cross_ok = False
+                    if double_cross_signal == 'CALL':
+                        double_cross_ok = adx_ok and dx_ok_call and is_bullish_candle
+                    elif double_cross_signal == 'PUT':
+                        double_cross_ok = adx_ok and dx_ok_put and is_bearish_candle
+
+                    if current_active_count < self.max_concurrent_trades and double_cross_signal and double_cross_ok:
                         if active_trades[double_cross_signal] is None:
                             initial_risk = self._get_initial_risk(current_atr)
                             
@@ -742,7 +820,15 @@ class OptionStrategy:
                                     
                                     # Check if we already have a position in this direction
                                     target_opt_type = 'CALL' if category_lower == 'Bullish' else 'PUT' if category_lower == 'Bearish' else None
-                                    if target_opt_type and active_trades[target_opt_type] is None:
+                                    
+                                    # Add candle color confirmation for patterns
+                                    pattern_candle_ok = False
+                                    if target_opt_type == 'CALL' and is_bullish_candle:
+                                        pattern_candle_ok = True
+                                    elif target_opt_type == 'PUT' and is_bearish_candle:
+                                        pattern_candle_ok = True
+                                        
+                                    if target_opt_type and active_trades[target_opt_type] is None and pattern_candle_ok:
                                         signals = get_option_signals(
                                             category_lower, 
                                             pattern_name, 
@@ -751,8 +837,12 @@ class OptionStrategy:
                                             rsi_value=current_rsi,
                                             rsi_upper=current_rsi_upper,
                                             adx_value=current_adx,
+                                            dmp_value=current_dmp,
+                                            dmn_value=current_dmn,
                                             rsi_config=self.rsi_config,
-                                            adx_config=self.adx_config
+                                            adx_config=self.adx_config,
+                                            df=df_lower,
+                                            index=i-1
                                         )
                                         
                                         for signal in signals:

@@ -171,7 +171,11 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                 
                 # ADX Trend Strength Filter
                 adx_value = row.get('ADX', 0)
+                dmp_value = row.get('DMP', 0)
+                dmn_value = row.get('DMN', 0)
                 adx_ok = adx_value > self.adx_threshold if self.adx_enabled else True
+                dx_ok_call = dmp_value > dmn_value if self.adx_enabled and self.dx_enabled else True
+                dx_ok_put = dmn_value > dmp_value if self.adx_enabled and self.dx_enabled else True
 
                 # 1. PUT Trade: HH -> LH -> Breakdown (Close < HL)
                 if has_hh and has_lh and hl_price is not None:
@@ -182,7 +186,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                         rsi_ok = row['rsi'] <= self.rsi_put_threshold
                         htf_rsi_ok = rsi_upper <= neutral_rsi if rsi_upper is not None else True
                         
-                        if rsi_ok and htf_rsi_ok and row['close'] < row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
+                        if rsi_ok and htf_rsi_ok and row['close'] < row[f'ema{self.short_ema}'] and volume_ok and adx_ok and dx_ok_put:
                             active_trade = Trade(
                                 option_type='PUT',
                                 pattern='HH-LH-Breakdown',
@@ -211,7 +215,7 @@ class MarketStructureStrategy(TrendMomentumStrategy):
                         rsi_ok = row['rsi'] >= self.rsi_call_threshold
                         htf_rsi_ok = rsi_upper >= neutral_rsi if rsi_upper is not None else True
 
-                        if rsi_ok and htf_rsi_ok and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok:
+                        if rsi_ok and htf_rsi_ok and row['close'] > row[f'ema{self.short_ema}'] and volume_ok and adx_ok and dx_ok_call:
                             active_trade = Trade(
                                 option_type='CALL',
                                 pattern='LL-LH-Breakout',
