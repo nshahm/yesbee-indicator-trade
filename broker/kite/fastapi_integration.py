@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .kite_oauth import include_auth_router
 from .kite_trading_endpoints import include_trading_router
+from .live import paper_router
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,9 @@ def setup_kite_api(app: FastAPI, enable_cors: bool = True) -> FastAPI:
     
     app = include_trading_router(app)
     logger.info("Trading routes registered (/api/trading/*)")
+    
+    app.include_router(paper_router)
+    logger.info("Paper trading routes registered (/api/paper/*)")
     
     @app.get("/")
     async def root() -> dict:

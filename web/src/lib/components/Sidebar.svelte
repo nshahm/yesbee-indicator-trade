@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { LayoutDashboard, TrendingUp, History, Settings, ChevronRight, PlayCircle, Library, Briefcase } from 'lucide-svelte';
+  import { LayoutDashboard, TrendingUp, History, Settings, ChevronRight, PlayCircle, Library, Briefcase, FlaskConical } from 'lucide-svelte';
   import { page } from '$app/state';
 
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/' },
     { name: 'Analytics', icon: TrendingUp, href: '/analytics' },
     { name: 'Backtest', icon: PlayCircle, href: '/backtest' },
+    { name: 'Paper Trade', icon: FlaskConical, href: '/papertrade' },
     { name: 'Trade History', icon: History, href: '/history' },
     { name: 'Broker', icon: Briefcase, href: '/broker' },
     { name: 'Settings', icon: Settings, href: '/settings' },

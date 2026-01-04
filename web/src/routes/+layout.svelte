@@ -12,6 +12,7 @@
 		'/': 'Dashboard',
 		'/analytics': 'Analytics',
 		'/backtest': 'Backtest',
+		'/papertrade': 'Paper Trade',
 		'/history': 'Trade History',
 		'/backtest/history': 'Backtest History',
 		'/settings': 'Settings'
